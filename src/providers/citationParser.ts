@@ -9,7 +9,12 @@ import { ParsedCitation } from "./types";
 // alone (used heavily in reporter/party abbreviations) can't be relied on as a sentence boundary.
 const NAME_START_TOKEN = "[A-Z][A-Za-z.'&-]*";
 const NAME_CONT_TOKEN = "(?:[A-Z][A-Za-z.'&-]*|&|of|the|and|for|a|an|ex|rel\\.?)";
-const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN})*`;
+// Bounding the continuation-token repeat (real Bluebook case names don't run past a handful of
+// words) keeps worst-case scan time roughly linear in document length. An unbounded `*` here let
+// long non-matching runs of capitalized tokens (an all-caps heading, a name-heavy appendix) drive
+// the regex engine into quadratic backtracking -- confirmed ~20s on a 150K-char adversarial input
+// before this bound was added.
+const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN}){0,12}`;
 // A complete number token, e.g. the "745" in "745, 753" or the "349" in "349 F. Supp. 3d". The
 // trailing \b matters: without it, "\d+" happily matches just the "3" out of a reporter suffix like
 // "3d" (as in "F. Supp. 3d"), and since everything after the page number is optional, the regex

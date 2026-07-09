@@ -1,4 +1,5 @@
 import { ParsedCitation } from "../providers/types";
+import { escapeRegExp } from "../utils";
 import { BluebookIssue } from "./types";
 import { T6_T13_MERGER_ABBREVIATIONS } from "./caseNameAbbreviations";
 import { CASE_NAME_ABBREVIATIONS } from "./generated/caseNameAbbreviations.generated";
@@ -73,7 +74,7 @@ export function checkCaseNameAbbreviations(citation: ParsedCitation): BluebookIs
   const issues: BluebookIssue[] = [];
 
   for (const entry of T6_T13_MERGER_ABBREVIATIONS) {
-    const wordRegex = new RegExp(`\\b${entry.word}\\b`, "i");
+    const wordRegex = new RegExp(`\\b${escapeRegExp(entry.word)}\\b`, "i");
     if (wordRegex.test(caseName)) {
       issues.push({
         ruleId: "t6-t13-merger-abbreviation",

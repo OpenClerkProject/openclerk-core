@@ -62,6 +62,14 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Escapes regex metacharacters so a data-driven string (e.g. a vendored reporters-db entry) can
+ * be safely spliced into a `new RegExp(...)` call site without being interpreted as a pattern.
+ */
+export function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function stripHtmlHyperlinks(html: string): string {
   if (!html) return "";
 
@@ -71,13 +79,25 @@ export function stripHtmlHyperlinks(html: string): string {
   // Remove any remaining HTML tags
   result = result.replace(/<[^>]+>/g, "");
 
-  // Decode a handful of common HTML entities
-  result = result
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  // Decode a handful of common HTML entities in a single combined pass -- decoding sequentially
+  // (one .replace() per entity) would double-unescape input like "&amp;lt;" (first pass turns
+  // "&amp;" into "&", producing "&lt;", which a later pass then turns into "<").
+  result = result.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (entity) => {
+    switch (entity) {
+      case "&amp;":
+        return "&";
+      case "&lt;":
+        return "<";
+      case "&gt;":
+        return ">";
+      case "&quot;":
+        return '"';
+      case "&#39;":
+        return "'";
+      default:
+        return entity;
+    }
+  });
 
   return normalizeText(result);
 }

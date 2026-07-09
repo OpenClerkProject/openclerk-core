@@ -1,4 +1,5 @@
 import { ParsedCitation } from "../providers/types";
+import { escapeRegExp } from "../utils";
 import { BluebookIssue } from "./types";
 import { STATE_ABBREVIATIONS } from "./generated/stateAbbreviations.generated";
 
@@ -23,7 +24,7 @@ export function checkCourtStateAbbreviation(citation: ParsedCitation): BluebookI
       // nothing to flag.
       continue;
     }
-    if (new RegExp(`\\b${fullName}\\b`, "i").test(court)) {
+    if (new RegExp(`\\b${escapeRegExp(fullName)}\\b`, "i").test(court)) {
       return [
         {
           ruleId: "court-state-not-abbreviated",
