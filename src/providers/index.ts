@@ -14,4 +14,3 @@ citationProviderRegistry.register(new UsptoPatentCenterProvider());
 export { citationProviderRegistry } from "./registry";
 export * from "./types";
 export { parseCaseCitation, extractCaseCitations } from "./citationParser";
-export { expandPincitePages } from "./pincitePages";
