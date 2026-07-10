@@ -11,8 +11,9 @@ export function reconstructFullPageNumber(start: string, writtenEnd: string): st
 
 /**
  * Expands a citation's pincite string -- a single page ("496"), a comma-separated list
- * ("505, 508, 513"), and/or a Bluebook-dropped-digit range ("705-06") -- into the full,
- * deduplicated, ascending list of individual page numbers it refers to.
+ * ("505, 508, 513"), a Bluebook-dropped-digit range ("705-06"), and/or a page with a footnote
+ * pincite ("567 n.1") -- into the full, deduplicated, ascending list of individual page numbers
+ * it refers to.
  */
 export function expandPincitePages(pincite: string): number[] {
   const pages = new Set<number>();
@@ -32,6 +33,14 @@ export function expandPincitePages(pincite: string): number[] {
 
     if (/^\d+$/.test(segment)) {
       pages.add(parseInt(segment, 10));
+      continue;
+    }
+
+    // A page with a trailing footnote pincite, e.g. "567 n.1" -- fetch by the page it's on;
+    // there's no separate per-footnote text to pull out, only per-page.
+    const footnoteMatch = segment.match(/^(\d+)\s+n\.?\s*\d+$/);
+    if (footnoteMatch) {
+      pages.add(parseInt(footnoteMatch[1], 10));
     }
   }
 

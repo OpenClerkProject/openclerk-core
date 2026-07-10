@@ -18,6 +18,23 @@ export interface ParsedCitation {
   pincite?: string;
   court?: string;
   year?: string;
+  /**
+   * True for a Bluebook short-form citation (Rule 10.9), e.g. "Rundo, 990 F.3d at 712" --
+   * referencing a case already cited in full elsewhere in the document. Short forms intentionally
+   * omit the court/year parenthetical (it was already given in the earlier full citation), so
+   * rule-checkers that require one should skip that check when this is true rather than flag a
+   * short form as an incomplete long-form citation.
+   */
+  isShortForm?: boolean;
+  /**
+   * Whether the case name portion of this citation is italicized and/or underlined in the source
+   * document (Bluebook Rule 2.1(a) requires one or the other). openclerk-core has no way to
+   * determine this itself -- it's platform-agnostic, with no access to the document that produced
+   * `raw` -- so this is left unset unless the caller (a Word/Docs/browser integration that *can*
+   * inspect the live document's formatting) explicitly supplies it. Unset means "unknown, don't
+   * check", not "neither" -- see checkCaseNameTypeface in bluebook/typefaceRules.ts.
+   */
+  caseNameFormatting?: { italic: boolean; underlined: boolean };
 }
 
 export interface CitationMatch {

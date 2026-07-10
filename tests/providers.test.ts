@@ -116,8 +116,27 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
     });
   });
 
-  test('known limitation: a footnote pincite ("n.1") between the pincite and parenthetical is not parsed', () => {
-    expect(parseCaseCitation('Darlingh v. Maddaleni, 142 F.4th 558, 567 n.1 (7th Cir. 2025)')).toBeNull();
+  test('a footnote pincite ("n.1") between the pincite and parenthetical is parsed, not dropped', () => {
+    // Regression test: found via manual validation against a real brief. The old pincite pattern
+    // had nothing that could consume "n.1", so it stopped right after "567" and left the whole
+    // court/year parenthetical -- including the year -- outside the match entirely, which the
+    // top-level regex then rejected as unparseable ("no year" error) rather than reading through.
+    const parsed = parseCaseCitation('Darlingh v. Maddaleni, 142 F.4th 558, 567 n.1 (7th Cir. 2025)');
+    expect(parsed).toEqual({
+      raw: 'Darlingh v. Maddaleni, 142 F.4th 558, 567 n.1 (7th Cir. 2025)',
+      caseName: 'Darlingh v. Maddaleni',
+      volume: '142',
+      reporter: 'F.4th',
+      page: '558',
+      pincite: '567 n.1',
+      court: '7th Cir.',
+      year: '2025',
+    });
+  });
+
+  test('a footnote pincite works alongside a multi-page pincite list', () => {
+    const parsed = parseCaseCitation('Rundo, 990 F.3d 709, 719, 722 n.4 (9th Cir. 2021)');
+    expect(parsed).toMatchObject({ page: '709', pincite: '719, 722 n.4', court: '9th Cir.', year: '2021' });
   });
 
   test('known limitation: a parallel citation to a second reporter is misparsed, not rejected', () => {
@@ -132,6 +151,35 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
     );
     expect(parsed?.reporter).toBe('N.Y.S.2d');
     expect(parsed?.caseName).toContain('24 Misc. 2d 790');
+  });
+});
+
+describe('parseCaseCitation: short-form citations (Rule 10.9)', () => {
+  test('parses "Name, Vol Reporter at Page" with no court/year, flagged isShortForm', () => {
+    expect(parseCaseCitation('Rundo, 990 F.3d at 712')).toEqual({
+      raw: 'Rundo, 990 F.3d at 712',
+      caseName: 'Rundo',
+      volume: '990',
+      reporter: 'F.3d',
+      pincite: '712',
+      isShortForm: true,
+    });
+  });
+
+  test('a short-form footnote pincite is captured in full', () => {
+    const parsed = parseCaseCitation('Rundo, 990 F.3d at 712 n.2');
+    expect(parsed).toMatchObject({ pincite: '712 n.2', isShortForm: true });
+  });
+
+  test('a short-form multi-page pincite list is captured in full', () => {
+    const parsed = parseCaseCitation('Rundo, 990 F.3d at 712, 715');
+    expect(parsed).toMatchObject({ pincite: '712, 715', isShortForm: true });
+  });
+
+  test('a long-form citation is never misparsed as a short form', () => {
+    // Sanity check that the short-form fallback only ever runs after the long-form pattern has
+    // already failed -- a normal long-form citation shouldn't come back flagged isShortForm.
+    expect(parseCaseCitation(EXAMPLE_CITATION)?.isShortForm).toBeUndefined();
   });
 });
 
@@ -166,6 +214,27 @@ describe('extractCaseCitations', () => {
     expect(results).toContain('Brown v. Board of Education, 347 U.S. 483 (1954)');
     expect(results).toContain('Plessy v. Ferguson, 163 U.S. 537 (1896)');
     expect(results).toHaveLength(2);
+  });
+
+  test('a footnote pincite no longer truncates the match before the court/year parenthetical', () => {
+    const text =
+      "Courts often refer to this as the Heckler's Veto doctrine. Darlingh v. Maddaleni, 142 F.4th 558, 567 n.1 (7th Cir. 2025); Rundo, 990 F.3d at 712.";
+    const results = extractCaseCitations(text);
+    expect(results).toContain('Darlingh v. Maddaleni, 142 F.4th 558, 567 n.1 (7th Cir. 2025)');
+  });
+
+  test('finds a short-form citation ("Name, Vol Reporter at Page") alongside a full one', () => {
+    const text =
+      'United States v. Rundo, 990 F.3d 709, 719 (9th Cir. 2021) (finding that messages inciting riots are not protected speech). ' +
+      'Rundo, 990 F.3d at 712.';
+    const results = extractCaseCitations(text);
+    expect(results).toContain('United States v. Rundo, 990 F.3d 709, 719 (9th Cir. 2021)');
+    expect(results).toContain('Rundo, 990 F.3d at 712');
+  });
+
+  test('a short-form citation with a footnote pincite is found', () => {
+    const text = 'Later the court revisited the issue. Rundo, 990 F.3d at 712 n.2.';
+    expect(extractCaseCitations(text)).toContain('Rundo, 990 F.3d at 712 n.2');
   });
 });
 
