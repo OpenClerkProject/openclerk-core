@@ -15,6 +15,18 @@ to be duplicated (or drift out of sync) across each platform integration.
   interface, a registry, and implementations for CourtListener, Westlaw, LexisNexis, Bloomberg
   Law, and USPTO Patent Center), plus citation parsing (`citationParser.ts`), pincite-page
   handling (`pincitePages.ts`), and cited-opinion-text extraction (`opinionTextExtractor.ts`).
+  `citationParser.ts` also does eyecite-style citation resolution: `extractCitationTokens` finds
+  full, short-form (`444 U.S. at 495`), `Id.`, and `supra` citations in running text;
+  `clusterCitationTokens` groups them by which case each one refers to; and
+  `findOrphanedCitations` surfaces a short-form/`Id.`/`supra` citation with no resolvable
+  antecedent. `hallucinationCheck.ts`'s `checkCitationsForHallucinations` checks a list of
+  citations against a list of `CitationProvider`s and reports any that none of them can verify —
+  see `tests/hallucinationCheck.test.ts`, which runs this against real text from the *Mata v.
+  Avianca* filing at the center of the widely reported ChatGPT-fabricated-citation incident, and
+  confirms the two fabricated cases in it are correctly flagged as unverified. (The PDF itself,
+  and the OCR pipeline used to recover its text, live in
+  [openclerk-web](https://github.com/OpenClerkProject/openclerk-web) — that's a heavy,
+  browser-upload-specific concern this platform-agnostic package deliberately doesn't carry.)
 - **`src/bluebook/`** — Bluebook citation format-checking across the 20th/21st/22nd editions,
   including reporter/case-name/state abbreviation data vendored from
   [reporters-db](https://github.com/freelawproject/reporters-db) (`src/bluebook/generated/`) and a
