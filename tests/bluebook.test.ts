@@ -6,6 +6,7 @@ import { Bluebook22ndEdition } from '../src/bluebook/edition22nd';
 import { checkCommonCaseCitationRules } from '../src/bluebook/commonRules';
 import { applyManualReporterOverrides } from '../src/bluebook/reporterRules';
 import { applyManualCaseNameOverrides } from '../src/bluebook/checkCaseNameAbbreviations';
+import { checkCaseNameTypeface } from '../src/bluebook/typefaceRules';
 import { ParsedCitation } from '../src/providers/types';
 
 const EXAMPLE_CITATION = 'Norfolk & W. Ry. Co. v. Liepelt, 444 U.S. 490 (U.S.Ill., 1980)';
@@ -66,6 +67,65 @@ describe('checkCommonCaseCitationRules', () => {
   test('does not require a court abbreviation for U.S. Reports citations', () => {
     const issues = checkCommonCaseCitationRules(parseOrThrow('Brown v. Board of Education, 347 U.S. 483 (1954)'));
     expect(issues.some((i) => i.ruleId === 'court-abbreviation-required')).toBe(false);
+  });
+
+  test('a short-form citation is not flagged for a missing year or court (Rule 10.9 omits both by design)', () => {
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Rundo, 990 F.3d at 712'));
+    expect(issues.some((i) => i.ruleId === 'year-required')).toBe(false);
+    expect(issues.some((i) => i.ruleId === 'court-abbreviation-required')).toBe(false);
+  });
+
+  test('a short-form citation with a malformed reporter is still flagged -- the short-form exemption is narrow', () => {
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Rundo, 990 F.2nd at 712'));
+    expect(issues.some((i) => i.ruleId === 'reporter-ordinal')).toBe(true);
+  });
+
+  test('an "Id." citation is not flagged for a missing year or court either', () => {
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Id. at 715'));
+    expect(issues.some((i) => i.ruleId === 'year-required')).toBe(false);
+    expect(issues.some((i) => i.ruleId === 'court-abbreviation-required')).toBe(false);
+  });
+
+  test('an "Id." citation\'s pincite range is still checked (Rule 3.2 digit-dropping)', () => {
+    // The whole point of adding "Id." support was that its pincite gets checked like any other --
+    // "705-706" should still be flagged for not dropping the repetitious leading digit.
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Id. at 705-706'));
+    expect(issues.some((i) => i.ruleId === 'pincite-range-digits')).toBe(true);
+  });
+
+  test('a well-formed "Id." pincite range has no issues', () => {
+    expect(checkCommonCaseCitationRules(parseOrThrow('Id. at 705-06'))).toEqual([]);
+  });
+});
+
+describe('checkCaseNameTypeface (Bluebook Rule 2.1(a))', () => {
+  test('does not flag anything when the caller did not supply formatting info', () => {
+    // openclerk-core can't inspect document formatting itself -- an unset caseNameFormatting
+    // means "unknown", not "not italicized", so this must stay silent, not assume the worst.
+    expect(checkCaseNameTypeface(parseOrThrow(EXAMPLE_CITATION))).toEqual([]);
+  });
+
+  test('does not flag an italicized case name', () => {
+    const citation = { ...parseOrThrow(EXAMPLE_CITATION), caseNameFormatting: { italic: true, underlined: false } };
+    expect(checkCaseNameTypeface(citation)).toEqual([]);
+  });
+
+  test('does not flag an underlined case name', () => {
+    const citation = { ...parseOrThrow(EXAMPLE_CITATION), caseNameFormatting: { italic: false, underlined: true } };
+    expect(checkCaseNameTypeface(citation)).toEqual([]);
+  });
+
+  test('flags a case name that is neither italicized nor underlined', () => {
+    const citation = { ...parseOrThrow(EXAMPLE_CITATION), caseNameFormatting: { italic: false, underlined: false } };
+    const issues = checkCaseNameTypeface(citation);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ ruleId: 'case-name-typeface', severity: 'error' });
+  });
+
+  test('is wired into checkCommonCaseCitationRules', () => {
+    const citation = { ...parseOrThrow(EXAMPLE_CITATION), caseNameFormatting: { italic: false, underlined: false } };
+    const issues = checkCommonCaseCitationRules(citation);
+    expect(issues.some((i) => i.ruleId === 'case-name-typeface')).toBe(true);
   });
 });
 

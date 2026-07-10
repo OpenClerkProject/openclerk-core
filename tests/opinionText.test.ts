@@ -33,6 +33,16 @@ describe('expandPincitePages', () => {
   test('a mix of a range and single pages, deduplicated and sorted', () => {
     expect(expandPincitePages('705-06, 705, 710')).toEqual([705, 706, 710]);
   });
+
+  test('a page with a footnote pincite expands to just that page', () => {
+    // "567 n.1" -- fetch by the page the footnote is on; there's no separate per-footnote text
+    // to pull out of an opinion, only per-page.
+    expect(expandPincitePages('567 n.1')).toEqual([567]);
+  });
+
+  test('a footnote pincite mixed with plain pages, deduplicated and sorted', () => {
+    expect(expandPincitePages('567 n.1, 505, 567')).toEqual([505, 567]);
+  });
 });
 
 describe('extractPageExcerpt', () => {
