@@ -51,8 +51,17 @@ const LEADING_SIGNAL_REGEX =
 // Bluebook short-form case citation, e.g. "444 U.S. at 495" or, with a leading party-name
 // signal, "Liepelt, 444 U.S. at 495" (Rule 10.9). The literal " at " before the pincite is what
 // distinguishes a short form from a full citation's page number, which never uses "at".
+//
+// The reporter segment is bounded to {1,40} rather than left as an unbounded lazy `+?`: unlike
+// CASE_CITATION_REGEX (where a required literal " v " sharply limits how many positions the
+// expensive part of the pattern is even attempted from), the leading case name here is optional,
+// so a bare NUMBER can anchor an attempt at nearly every digit run in the text. With an unbounded
+// lazy reporter segment, each of those O(n) attempts re-scans the rest of the string looking for
+// a literal " at " that a document may never contain -- confirmed quadratic (~8s at ~109K chars,
+// ~25s at ~189K chars) before this bound was added. No real Bluebook reporter abbreviation runs
+// anywhere near 40 characters.
 const SHORT_FORM_REGEX = new RegExp(
-  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]+?)\\s+at\\s+(${PINCITE_PAGE})`,
+  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]{1,40}?)\\s+at\\s+(${PINCITE_PAGE})`,
   "g"
 );
 // "Id." short-form citation (Rule 10.9), referring back to whichever citation immediately

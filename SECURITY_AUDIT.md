@@ -1,6 +1,7 @@
 # Security audit — openclerk-core
 
-Date: 2026-07-09
+Date: 2026-07-09 (updated 2026-07-10 — see finding 4, found while rebasing
+this audit's branch onto `main` after PR #2 landed)
 Scope: `openclerk-core` only (platform-agnostic citation parsing, Bluebook
 rule-checking, and citation-lookup provider plugin architecture). A
 companion audit of `openclerk-word` — the Office.js Word add-in that
@@ -101,6 +102,33 @@ explicitly guards against exactly this.
 
 **Fix:** rewrote `stripHtmlHyperlinks`'s entity decoding as a single
 combined-regex pass, mirroring `opinionTextExtractor.ts`'s approach.
+
+### 4. Quadratic ReDoS in `SHORT_FORM_REGEX` (`extractCitationTokens`) — fixed
+**File:** `src/providers/citationParser.ts` (`SHORT_FORM_REGEX`)
+
+Found while rebasing this audit's branch onto `main` after PR #2 ("Extract
+platform-agnostic core...") landed there and added `extractCitationTokens`
+(short-form/`Id.`/`supra` citation tokenizing, used by the new
+`hallucinationCheck`/citation-clustering feature) — not part of the
+original 2026-07-09 pass, since that code didn't exist on `main` yet when
+this audit started.
+
+`SHORT_FORM_REGEX` matches things like `"444 U.S. at 495"` or
+`"Liepelt, 444 U.S. at 495"`. Unlike `CASE_CITATION_REGEX` (where a
+required literal `" v "` sharply limits how many text positions the
+expensive part of the pattern is even attempted from), `SHORT_FORM_REGEX`'s
+leading case name is optional, so a bare `\d+\b` can anchor a match attempt
+at nearly every digit run in the text. Combined with the reporter
+segment's unbounded lazy quantifier (`[A-Za-z0-9.&' ]+?`) scanning forward
+each time looking for a literal `" at "` a document may never contain, this
+was quadratic: confirmed ~8s at ~109,000 chars and ~25s at ~189,000 chars
+(and didn't complete within a 2-minute timeout at ~589,000 chars).
+
+**Fix:** bounded the reporter segment to `{1,40}` (no real Bluebook
+reporter abbreviation runs anywhere near 40 characters). Re-benchmarked:
+~589,000 chars now completes in 90ms, ~1,539,000 chars in 228ms. Full test
+suite (130 tests, including the new `citationClustering.test.ts` and
+`hallucinationCheck.test.ts` from PR #2) still passes.
 
 ## Findings documented only (no code change)
 
