@@ -290,7 +290,7 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
   // citation (see the short-form fallback below) instead of leaving it for that pattern to match.
   const match = raw.match(
     new RegExp(
-      `^(.+?),\\s*(${NUMBER})\\s+([A-Za-z0-9.&' ]+?)\\s+(?<!\\bat\\s+)(${NUMBER})(?:,\\s*(${PINCITE_LIST}))?\\s*(?:\\(([^)]*)\\))?\\s*$`
+      `^(.+?),\\s*(${NUMBER})\\s+([A-Za-z0-9.&' ]+?)\\s+(?<!\\bat\\s)(${NUMBER})(?:,\\s*(${PINCITE_LIST}))?\\s*(?:\\(([^)]*)\\))?\\s*$`
     )
   );
 
