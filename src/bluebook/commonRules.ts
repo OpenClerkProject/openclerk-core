@@ -4,12 +4,15 @@ import { checkReporterAbbreviation } from "./reporterRules";
 import { checkFullCaseNameAbbreviations } from "./checkCaseNameAbbreviations";
 import { checkCourtStateAbbreviation } from "./courtRules";
 import { checkPincitePageRange } from "./pageRangeRules";
+import { checkCaseNameTypeface } from "./typefaceRules";
 
 /**
  * Checks for Bluebook Rule 10 (case citation) conventions that have stayed
  * stable across at least the last three editions (20th/2015, 21st/2020,
  * 22nd/2025) -- edition-specific rule-sets all run these, then layer their
- * own edition-specific checks on top (see caseNameAbbreviations.ts).
+ * own edition-specific checks on top (see caseNameAbbreviations.ts). Also
+ * includes the Rule 2.1(a) case-name-typeface check (checkCaseNameTypeface),
+ * which is edition-independent for the same reason the others here are.
  */
 export function checkCommonCaseCitationRules(citation: ParsedCitation): BluebookIssue[] {
   const issues: BluebookIssue[] = [];
@@ -33,22 +36,28 @@ export function checkCommonCaseCitationRules(citation: ParsedCitation): Bluebook
   issues.push(...checkFullCaseNameAbbreviations(citation));
   issues.push(...checkCourtStateAbbreviation(citation));
   issues.push(...checkPincitePageRange(citation));
+  issues.push(...checkCaseNameTypeface(citation));
 
-  if (!citation.year) {
-    issues.push({
-      ruleId: "year-required",
-      message: "No year found in the citation's parenthetical; Bluebook Rule 10.5 requires the decision year.",
-      severity: "error",
-    });
-  }
+  // Short-form citations (Rule 10.9, e.g. "Rundo, 990 F.3d at 712") intentionally have no
+  // court/year parenthetical at all -- that information was already given in the earlier full
+  // citation this one refers back to -- so these two checks don't apply to them.
+  if (!citation.isShortForm) {
+    if (!citation.year) {
+      issues.push({
+        ruleId: "year-required",
+        message: "No year found in the citation's parenthetical; Bluebook Rule 10.5 requires the decision year.",
+        severity: "error",
+      });
+    }
 
-  if (citation.reporter && citation.reporter !== "U.S." && !citation.court) {
-    issues.push({
-      ruleId: "court-abbreviation-required",
-      message:
-        'A court abbreviation is expected in the parenthetical for this reporter (Rule 10.4) -- only U.S. Reports ("U.S.") citations can omit it.',
-      severity: "warning",
-    });
+    if (citation.reporter && citation.reporter !== "U.S." && !citation.court) {
+      issues.push({
+        ruleId: "court-abbreviation-required",
+        message:
+          'A court abbreviation is expected in the parenthetical for this reporter (Rule 10.4) -- only U.S. Reports ("U.S.") citations can omit it.',
+        severity: "warning",
+      });
+    }
   }
 
   return issues;

@@ -50,7 +50,7 @@ Not yet published to the npm registry — consume it as a git dependency:
 ```json
 {
   "dependencies": {
-    "openclerk-core": "github:OpenClerkProject/openclerk-core#v0.1.0"
+    "openclerk-core": "github:OpenClerkProject/openclerk-core#v0.2.0"
   }
 }
 ```
