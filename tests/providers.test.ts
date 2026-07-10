@@ -183,6 +183,35 @@ describe('parseCaseCitation: short-form citations (Rule 10.9)', () => {
   });
 });
 
+describe('parseCaseCitation: "Id." citations (Rule 4.1/10.9(b))', () => {
+  test('parses "Id. at Page" with no case name, volume, or reporter, flagged isShortForm and isIdCitation', () => {
+    expect(parseCaseCitation('Id. at 715')).toEqual({
+      raw: 'Id. at 715',
+      pincite: '715',
+      isShortForm: true,
+      isIdCitation: true,
+    });
+  });
+
+  test('a lowercase "id." is accepted too', () => {
+    expect(parseCaseCitation('id. at 715')?.isIdCitation).toBe(true);
+  });
+
+  test('an "Id." footnote pincite is captured in full', () => {
+    const parsed = parseCaseCitation('Id. at 719 n.2');
+    expect(parsed).toMatchObject({ pincite: '719 n.2', isIdCitation: true });
+  });
+
+  test('an "Id." page-range pincite is captured in full', () => {
+    const parsed = parseCaseCitation('Id. at 705-06');
+    expect(parsed).toMatchObject({ pincite: '705-06', isIdCitation: true });
+  });
+
+  test('a bare "Id." with no pincite is not parsed -- nothing to check', () => {
+    expect(parseCaseCitation('Id.')).toBeNull();
+  });
+});
+
 describe('extractCaseCitations', () => {
   test('finds a full citation embedded in surrounding prose', () => {
     const text = `The court's holding in ${EXAMPLE_CITATION} affects the collateral source rule.`;
@@ -235,6 +264,25 @@ describe('extractCaseCitations', () => {
   test('a short-form citation with a footnote pincite is found', () => {
     const text = 'Later the court revisited the issue. Rundo, 990 F.3d at 712 n.2.';
     expect(extractCaseCitations(text)).toContain('Rundo, 990 F.3d at 712 n.2');
+  });
+
+  test('finds an "Id." citation with a pincite', () => {
+    const text = 'Id. at 715. The court went on to explain the reasoning further.';
+    expect(extractCaseCitations(text)).toContain('Id. at 715');
+  });
+
+  test('finds an "Id." citation with a footnote pincite, alongside other citations', () => {
+    const text =
+      'United States v. Rundo, 990 F.3d 709, 719 (9th Cir. 2021). Id. at 719 n.2. Rundo, 990 F.3d at 722.';
+    const results = extractCaseCitations(text);
+    expect(results).toContain('United States v. Rundo, 990 F.3d 709, 719 (9th Cir. 2021)');
+    expect(results).toContain('Id. at 719 n.2');
+    expect(results).toContain('Rundo, 990 F.3d at 722');
+  });
+
+  test('does not match a bare "Id." with no pincite -- nothing to check', () => {
+    const text = 'The court agreed. Id. That resolved the matter.';
+    expect(extractCaseCitations(text).some((r) => r === 'Id.' || r.startsWith('Id.'))).toBe(false);
   });
 });
 

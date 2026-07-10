@@ -79,6 +79,23 @@ describe('checkCommonCaseCitationRules', () => {
     const issues = checkCommonCaseCitationRules(parseOrThrow('Rundo, 990 F.2nd at 712'));
     expect(issues.some((i) => i.ruleId === 'reporter-ordinal')).toBe(true);
   });
+
+  test('an "Id." citation is not flagged for a missing year or court either', () => {
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Id. at 715'));
+    expect(issues.some((i) => i.ruleId === 'year-required')).toBe(false);
+    expect(issues.some((i) => i.ruleId === 'court-abbreviation-required')).toBe(false);
+  });
+
+  test('an "Id." citation\'s pincite range is still checked (Rule 3.2 digit-dropping)', () => {
+    // The whole point of adding "Id." support was that its pincite gets checked like any other --
+    // "705-706" should still be flagged for not dropping the repetitious leading digit.
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Id. at 705-706'));
+    expect(issues.some((i) => i.ruleId === 'pincite-range-digits')).toBe(true);
+  });
+
+  test('a well-formed "Id." pincite range has no issues', () => {
+    expect(checkCommonCaseCitationRules(parseOrThrow('Id. at 705-06'))).toEqual([]);
+  });
 });
 
 describe('checkCaseNameTypeface (Bluebook Rule 2.1(a))', () => {

@@ -40,6 +40,11 @@ const SHORT_FORM_CITATION_REGEX = new RegExp(
   `${CASE_NAME},\\s*${NUMBER}\\s+[A-Za-z0-9.&' ]+?\\s+at\\s+${PINCITE_LIST}`,
   "g"
 );
+// An "Id." citation (Rule 10.9(b)/4.1), e.g. "Id. at 715" or "Id. at 719 n.2" -- refers back to
+// the single most recently cited authority, restating nothing but a new pincite. Scoped to
+// requiring "at <pincite>": a bare "Id." with no pincite has nothing for this parser to check
+// (no reporter, no page), so there's no reason to extract it just to report "no issues found".
+const ID_CITATION_REGEX = new RegExp(`\\b[Ii]d\\.\\s+at\\s+${PINCITE_LIST}`, "g");
 
 // Bluebook introductory signals (see Bluebook Rule 1.2) that commonly precede a citation with no
 // intervening punctuation, e.g. "See generally Norfolk & W. Ry. Co. v. Liepelt, ...". Without
@@ -55,7 +60,11 @@ const LEADING_SIGNAL_REGEX =
  * are only ever asked about text this function judged citation-shaped.
  */
 export function extractCaseCitations(text: string): string[] {
-  const matches = [...(text.match(CASE_CITATION_REGEX) || []), ...(text.match(SHORT_FORM_CITATION_REGEX) || [])];
+  const matches = [
+    ...(text.match(CASE_CITATION_REGEX) || []),
+    ...(text.match(SHORT_FORM_CITATION_REGEX) || []),
+    ...(text.match(ID_CITATION_REGEX) || []),
+  ];
   const unique = new Set<string>();
 
   matches.forEach((match) => {
@@ -135,6 +144,20 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
       reporter: reporter?.trim(),
       pincite: pincite?.trim(),
       isShortForm: true,
+    };
+  }
+
+  // Fall back further to an "Id." citation (Rule 4.1/10.9(b)), e.g. "Id. at 715 n.2" -- no case
+  // name, volume, or reporter of its own; it refers back to whatever was cited immediately before.
+  const idMatch = raw.match(new RegExp(`^[Ii]d\\.\\s+at\\s+(${PINCITE_LIST})$`));
+
+  if (idMatch) {
+    const [, pincite] = idMatch;
+    return {
+      raw,
+      pincite: pincite.trim(),
+      isShortForm: true,
+      isIdCitation: true,
     };
   }
 

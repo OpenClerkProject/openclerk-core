@@ -27,6 +27,16 @@ export interface ParsedCitation {
    */
   isShortForm?: boolean;
   /**
+   * True for an "Id." citation (Rule 4.1/10.9(b)), e.g. "Id. at 715" -- referring back to the
+   * single most recently cited authority. Always implies isShortForm as well (an Id. citation
+   * omits court/year exactly like any other short form), but is its own flag since, unlike a
+   * "Name, Vol Reporter at Page" short form, an Id. citation has no caseName/volume/reporter of
+   * its own at all -- callers that need to resolve what case "Id." actually refers to (e.g. to
+   * look it up online) have to track the immediately preceding full citation themselves;
+   * openclerk-core only parses the citation string in front of it.
+   */
+  isIdCitation?: boolean;
+  /**
    * Whether the case name portion of this citation is italicized and/or underlined in the source
    * document (Bluebook Rule 2.1(a) requires one or the other). openclerk-core has no way to
    * determine this itself -- it's platform-agnostic, with no access to the document that produced
