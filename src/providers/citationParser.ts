@@ -166,6 +166,41 @@ function caseNameMatchesToken(caseName: string, namePart: string): boolean {
     .some((party) => party.includes(normalizedNamePart) || normalizedNamePart.includes(party));
 }
 
+function normalizeCaseNameParty(party: string): string {
+  return party
+    .toLowerCase()
+    .replace(/[.,]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Compares two full case names for a real correspondence, tolerating abbreviation differences (in
+ * either direction) the same way caseNameMatchesToken does for short forms.
+ *
+ * This exists to catch a specific, dangerous class of citation hallucination: a lookup provider
+ * that resolves a citation by its locator (reporter/volume/page) rather than by the case name
+ * attached to it -- which is exactly how CourtListener's citation-lookup API works -- will
+ * happily return the real case actually published at that locator even when the case name typed
+ * (or fabricated by an LLM) alongside it names a different case entirely. A non-null
+ * CitationProvider#lookupCitation() result therefore does not by itself mean the citation is
+ * real; it means *a* case exists at that locator. Callers that treat "found a locator" as
+ * "verified" without also checking this can be fooled by exactly the kind of fabricated citation
+ * (a real reporter/volume/page attached to an invented party name) at the center of the Mata v.
+ * Avianca ChatGPT-hallucinated-citations incident -- see tests/hallucinationCheck.test.ts.
+ */
+export function caseNamesMatch(a: string, b: string): boolean {
+  const partiesA = a.split(/\s+v\.?\s+/i).map(normalizeCaseNameParty);
+  const partiesB = b.split(/\s+v\.?\s+/i).map(normalizeCaseNameParty);
+
+  if (partiesA.length !== 2 || partiesB.length !== 2) {
+    return normalizeCaseNameParty(a) === normalizeCaseNameParty(b);
+  }
+
+  const partyMatches = (p1: string, p2: string) => p1 === p2 || p1.includes(p2) || p2.includes(p1);
+  return partyMatches(partiesA[0], partiesB[0]) && partyMatches(partiesA[1], partiesB[1]);
+}
+
 /**
  * Groups citation tokens into clusters that refer to the same case -- eyecite calls this
  * "resolving" citations. Each full citation starts a new cluster; a short-form/supra token
