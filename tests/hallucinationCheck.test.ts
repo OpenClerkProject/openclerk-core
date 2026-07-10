@@ -1,4 +1,4 @@
-import { extractCaseCitations } from "../src/providers/citationParser";
+import { extractCaseCitations, caseNamesMatch } from "../src/providers/citationParser";
 import { checkCitationsForHallucinations } from "../src/providers/hallucinationCheck";
 import { CitationProvider, CitationMatch, ParsedCitation } from "../src/providers/types";
 
@@ -54,6 +54,52 @@ function mockProvider(name: string, knownCaseNames: string[]): CitationProvider 
   };
 }
 
+// Real citation-lookup APIs like CourtListener's resolve a citation string by its locator
+// (reporter/volume/page), not by the case name attached to it -- so they return whatever real
+// case is actually published at that locator, regardless of what name the input citation claims.
+// This stands in for that behavior: it always "finds" a match, but the match's case name has
+// nothing to do with the one it was asked to look up.
+function mockLocatorOnlyProvider(name: string, foundCaseName: string): CitationProvider {
+  return {
+    id: name.toLowerCase().replace(/\s+/g, "-"),
+    name,
+    description: "test double",
+    requiresAuth: false,
+    credentialFields: [],
+    isAuthenticated: () => true,
+    authenticate: async () => undefined,
+    signOut: () => undefined,
+    lookupCitation: async (): Promise<CitationMatch | null> => {
+      return { url: "https://example.test/some-real-case", caseName: foundCaseName };
+    },
+  };
+}
+
+describe("caseNamesMatch", () => {
+  test("matches identical names", () => {
+    expect(caseNamesMatch("Peterson v. Islamic Republic of Iran", "Peterson v. Islamic Republic of Iran")).toBe(true);
+  });
+
+  test("tolerates punctuation and whitespace differences", () => {
+    expect(caseNamesMatch("Norfolk & W. Ry. Co. v. Liepelt", "Norfolk  &  W  Ry  Co  v  Liepelt")).toBe(true);
+  });
+
+  test("tolerates abbreviation differences in either direction", () => {
+    expect(caseNamesMatch("Martinez v. Delta Airlines, Inc.", "Martinez v. Delta Airlines")).toBe(true);
+  });
+
+  test("does not match a fabricated party name against an unrelated real one", () => {
+    // The exact real-world pattern this exists to catch: "Iran Air" (a fabricated defendant) is
+    // not the same party as "Islamic Republic of Iran" (a real one CourtListener might resolve
+    // some other citation to), even though both mention Iran.
+    expect(caseNamesMatch("Peterson v. Iran Air", "Peterson v. Islamic Republic of Iran")).toBe(false);
+  });
+
+  test("does not match entirely different cases", () => {
+    expect(caseNamesMatch("Martinez v. Delta Airlines, Inc.", "Ehrlich v. American Airlines, Inc.")).toBe(false);
+  });
+});
+
 describe("citation extraction against the real Mata v. Avianca filing text", () => {
   test("extracts both ChatGPT-fabricated citations, correctly parsed", () => {
     const citations = extractCaseCitations(MATA_FILING_EXCERPT);
@@ -89,6 +135,50 @@ describe("checkCitationsForHallucinations against the real Mata v. Avianca filin
     expect(peterson?.verifiedVia).toBeNull();
     expect(martinez?.verifiedVia).toBeNull();
     expect(ehrlich?.verifiedVia).toBe("TestCaseLaw");
+  });
+
+  // Regression test for a real production bug: a provider that resolves a citation's locator
+  // (reporter/volume/page) to a real but unrelated case was being treated as verification of the
+  // fabricated case name attached to it, exactly reproducing what CourtListener's real
+  // citation-lookup API does. "905 F. Supp. 2d 121 (D.D.C. 2012)" is a real, valid-looking
+  // locator; "Peterson v. Iran Air" is not the case actually published there.
+  test("does not verify a fabricated case name just because its citation locator resolves to a real, different case", async () => {
+    const provider = mockLocatorOnlyProvider("CourtListener", "Peterson v. Islamic Republic of Iran");
+
+    const results = await checkCitationsForHallucinations(
+      ["Peterson v. Iran Air, 905 F. Supp. 2d 121 (D.D.C. 2012)"],
+      [provider]
+    );
+
+    expect(results[0].verifiedVia).toBeNull();
+    expect(results[0].nameMismatch).toEqual({
+      provider: "CourtListener",
+      foundCaseName: "Peterson v. Islamic Republic of Iran",
+    });
+  });
+
+  test("still verifies when the resolved case name genuinely corresponds, tolerating formatting differences", async () => {
+    const provider = mockLocatorOnlyProvider("CourtListener", "Martinez v. Delta Airlines");
+
+    const results = await checkCitationsForHallucinations(
+      ["Martinez v. Delta Airlines, Inc., 2019 WL 4639462 (Tex. App. Sept. 25, 2019)"],
+      [provider]
+    );
+
+    expect(results[0].verifiedVia).toBe("CourtListener");
+    expect(results[0].nameMismatch).toBeUndefined();
+  });
+
+  test("falls through to a later provider when an earlier one resolves to a name mismatch", async () => {
+    const wrongProvider = mockLocatorOnlyProvider("WrongProvider", "Peterson v. Islamic Republic of Iran");
+    const rightProvider = mockProvider("RightProvider", ["Peterson v. Iran Air"]);
+
+    const results = await checkCitationsForHallucinations(
+      ["Peterson v. Iran Air, 905 F. Supp. 2d 121 (D.D.C. 2012)"],
+      [wrongProvider, rightProvider]
+    );
+
+    expect(results[0].verifiedVia).toBe("RightProvider");
   });
 
   test("does not flag a citation as a hallucination just because the only checked provider was rate-limited", async () => {

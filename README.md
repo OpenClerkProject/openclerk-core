@@ -27,6 +27,15 @@ to be duplicated (or drift out of sync) across each platform integration.
   and the OCR pipeline used to recover its text, live in
   [openclerk-web](https://github.com/OpenClerkProject/openclerk-web) — that's a heavy,
   browser-upload-specific concern this platform-agnostic package deliberately doesn't carry.)
+  Resolving a citation's locator (reporter/volume/page) is not the same as confirming the case is
+  real — CourtListener's citation-lookup API, for one, resolves purely by locator, so it returns
+  whatever real case is actually published there even if the case name typed alongside it names
+  something else entirely. `checkCitationsForHallucinations` guards against this with
+  `caseNamesMatch`: a provider result only counts as `verifiedVia` when its returned case name
+  actually corresponds to the citation's own parsed name; a locator that resolves to a genuine but
+  differently-named case is reported via the result's `nameMismatch` field instead — a stronger
+  fabrication signal than a plain miss, since it means the reporter/volume/page is real but
+  misattributed.
 - **`src/bluebook/`** — Bluebook citation format-checking across the 20th/21st/22nd editions,
   including reporter/case-name/state abbreviation data vendored from
   [reporters-db](https://github.com/freelawproject/reporters-db) (`src/bluebook/generated/`) and a
