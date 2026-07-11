@@ -207,6 +207,33 @@ function normalizeCaseNameParty(party: string): string {
     .trim();
 }
 
+// One normalized party name "contains" another only when the shorter appears as a contiguous run
+// of whole words inside the longer (e.g. "delta airlines" inside "delta airlines inc"). A raw
+// String#includes here would defeat the whole verification this feeds: every string contains ""
+// (so a party that normalizes to empty -- ". v. ," parses fine -- matched anything), and short
+// fragments match on accident ("us", from "U.S.", is a substring of "columbus", so
+// "U.S. v. Smith" counted as verified by a lookup that actually returned "Columbus v. Smith").
+function partyWordsContain(container: string, contained: string): boolean {
+  const containerWords = container.split(" ").filter(Boolean);
+  const containedWords = contained.split(" ").filter(Boolean);
+  if (containedWords.length === 0 || containedWords.length > containerWords.length) {
+    return false;
+  }
+  for (let start = 0; start + containedWords.length <= containerWords.length; start++) {
+    let allEqual = true;
+    for (let offset = 0; offset < containedWords.length; offset++) {
+      if (containerWords[start + offset] !== containedWords[offset]) {
+        allEqual = false;
+        break;
+      }
+    }
+    if (allEqual) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Compares two full case names for a real correspondence, tolerating abbreviation differences (in
  * either direction) the same way caseNameMatchesToken does for short forms.
@@ -227,10 +254,14 @@ export function caseNamesMatch(a: string, b: string): boolean {
   const partiesB = b.split(/\s+v\.?\s+/i).map(normalizeCaseNameParty);
 
   if (partiesA.length !== 2 || partiesB.length !== 2) {
-    return normalizeCaseNameParty(a) === normalizeCaseNameParty(b);
+    const wholeA = normalizeCaseNameParty(a);
+    const wholeB = normalizeCaseNameParty(b);
+    // Two names that both normalize to nothing share no evidence of naming the same case.
+    return wholeA !== "" && wholeA === wholeB;
   }
 
-  const partyMatches = (p1: string, p2: string) => p1 === p2 || p1.includes(p2) || p2.includes(p1);
+  const partyMatches = (p1: string, p2: string) =>
+    (p1 !== "" && p1 === p2) || partyWordsContain(p1, p2) || partyWordsContain(p2, p1);
   return partyMatches(partiesA[0], partiesB[0]) && partyMatches(partiesA[1], partiesB[1]);
 }
 

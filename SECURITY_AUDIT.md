@@ -188,3 +188,96 @@ secrets and no publish step (build+test only).
 `openclerk-gdocs` and `openclerk-libreoffice` — both empty repositories
 with no commits on the `claude/security-audit-r5lbyz` branch or elsewhere;
 nothing to audit.
+
+---
+
+# Round 2 — 2026-07-11
+
+Delta audit of code that landed on `main` after round 1: PR #3
+("fix citation-parsing bugs": footnote pincites, `SHORT_FORM_CITATION_REGEX`
+/ `ID_CITATION_REGEX`, the `(?<!\bat\s)` lookbehind in `parseCaseCitation`,
+`typefaceRules.ts`, `pincitePages.ts` footnote handling) and PR #6
+(hallucination-check name verification: `caseNamesMatch`,
+`nameMismatch` reporting in `hallucinationCheck.ts`). Also re-verified
+that round 1's fixes survived the remote merge of `main` into this branch.
+
+## Findings fixed in round 2
+
+### 5. Substring/empty-string bypass in `caseNamesMatch` — fixed
+**File:** `src/providers/citationParser.ts` (`caseNamesMatch`,
+`normalizeCaseNameParty`)
+
+`caseNamesMatch` is the gate that PR #6 added to stop a
+locator-resolves-but-name-differs citation (the Mata v. Avianca pattern)
+from being reported "verified" by the hallucination check. Its per-party
+comparison used raw `String#includes` in both directions, which defeats
+the gate two ways, both empirically confirmed against the built library:
+
+- **Empty-string bypass:** `normalizeCaseNameParty` strips periods and
+  commas, so a party like `"."` or `","` normalizes to `""` — and
+  `anything.includes("")` is always `true`. `parseCaseCitation` happily
+  parses `". v. ., 444 U.S. 490 (2020)"` (its case-name group is `(.+?)`),
+  so that fabricated citation with a real locator was reported
+  **verified** against any case actually published there.
+- **Short-fragment bypass:** `"U.S. v. Smith"` matched
+  `"Columbus v. Smith"` (`"us"` is a raw substring of `"columbus"`).
+  `"U.S. v. <name>"` is one of the most common case-name shapes in
+  existence, making this a realistic false-verify, not just a pathological
+  one. Single-letter parties (`"A v. B"` vs
+  `"Acme Corp. v. Bright Co."`) matched the same way.
+
+**Fix:** replaced raw substring containment with whole-word containment
+(`partyWordsContain`: the shorter party must appear as a contiguous run of
+whole words inside the longer), plus explicit empty guards in both the
+two-party path and the non-two-party equality fallback. The intended
+tolerances still hold (verified against the existing test expectations):
+normalized-punctuation equality
+(`"Norfolk & W. Ry. Co. v. Liepelt"` ≈ `"Norfolk  &  W  Ry  Co  v  Liepelt"`)
+and truncated-suffix containment
+(`"Delta Airlines, Inc." ≈ "Delta Airlines"`). All four bypass probes now
+return `false`; full suite (166 tests) passes. Note `"U.S. v. Nixon"` vs
+`"United States v. Nixon"` does not match — same as before this fix (raw
+substring didn't bridge that abbreviation either), and that direction
+fails safe: a real citation gets a `nameMismatch` note for human review
+rather than a fabricated one getting verified.
+
+## Verified clean in round 2 (no change needed)
+
+- **`SHORT_FORM_CITATION_REGEX` / `ID_CITATION_REGEX`
+  (`citationParser.ts`)** — the new short-form scan regex has the same
+  unbounded-lazy-reporter shape that made round 1's `SHORT_FORM_REGEX`
+  quadratic, so it was benchmarked against four adversarial input shapes
+  (capitalized-token runs, repeated `"Name, NUM"` anchors with comma-free
+  tails, digit-heavy bait, `" at "`-heavy pincite-list stress) up to 374K
+  chars: **linear, ≤3ms**. It stays safe because, unlike `SHORT_FORM_REGEX`,
+  its case-name-plus-comma prefix is required — and the comma excluded
+  from the reporter character class stops each lazy scan at the next
+  comma, so scans can't all run to end-of-string. `ID_CITATION_REGEX` is
+  anchored by a literal `Id.` — linear.
+- **Round-1 ReDoS bounds survived the remote merge** — `{0,12}` on
+  `CASE_NAME` and `{1,40}` on `SHORT_FORM_REGEX`'s reporter segment are
+  intact after GitHub's merge of `main` into this branch; re-ran the
+  round-1 benchmarks on the merged build: `extractCaseCitations` 14ms and
+  `extractCitationTokens` 165ms at ~1.5M chars.
+- **`(?<!\bat\s)` lookbehind in `parseCaseCitation`** — fixed-length,
+  anchored `^…$`, runs on single already-extracted citations (bounded
+  input), not document-scale text.
+- **`pincitePages.ts` footnote handling** — anchored linear regex on
+  short comma-split segments.
+- **`typefaceRules.ts` / `commonRules.ts`** — pure data checks and
+  control-flow changes; no regex construction, no network, no dynamic code.
+- **`hallucinationCheck.ts` name-mismatch flow** — correct given the
+  `caseNamesMatch` fix; a locator match with a differing name is now
+  reported via `nameMismatch` and never as `verifiedVia`.
+
+## Documented only (round 2)
+
+- **`caseNamesMatch` soft-accepts when either name is unavailable**
+  (`hallucinationCheck.ts`: `!parsed.caseName || !match.caseName` accepts
+  the provider match). This is a deliberate, documented design choice
+  ("this only tightens the case where both names are known") and matches
+  the fail-open behavior of round 1's pipeline. Worth revisiting if
+  providers that never return case names become common, since citations
+  they verify skip name checking entirely — but with today's providers
+  (CourtListener returns names) it is a reasonable trade-off against
+  false hallucination flags.
