@@ -8,6 +8,12 @@
  * any other source file; re-run this script and commit the diff to pick up
  * upstream updates.
  *
+ * SOURCES below is pinned to a specific reporters-db tag rather than `main` --
+ * fetching an unpinned branch means a malicious or compromised upstream commit could get vendored
+ * in the next time this script runs, and this data later gets spliced into `new RegExp(...)` calls
+ * (see src/bluebook/courtRules.ts, checkCaseNameAbbreviations.ts). To pick up an upstream update,
+ * bump REPORTERS_DB_REF below to the new tag/commit SHA you've reviewed, then re-run this script.
+ *
  * Usage: node scripts/generate-bluebook-data.js
  */
 const fs = require("fs");
@@ -16,12 +22,15 @@ const https = require("https");
 
 const outDir = path.resolve(__dirname, "..", "src", "bluebook", "generated");
 
+// Bump this to a reviewed tag or commit SHA from
+// https://github.com/freelawproject/reporters-db to pick up upstream updates -- never point it
+// back at a mutable ref like "main".
+const REPORTERS_DB_REF = "v3.2.66";
+
 const SOURCES = {
-  reporters: "https://raw.githubusercontent.com/freelawproject/reporters-db/main/reporters_db/data/reporters.json",
-  caseNameAbbreviations:
-    "https://raw.githubusercontent.com/freelawproject/reporters-db/main/reporters_db/data/case_name_abbreviations.json",
-  stateAbbreviations:
-    "https://raw.githubusercontent.com/freelawproject/reporters-db/main/reporters_db/data/state_abbreviations.json",
+  reporters: `https://raw.githubusercontent.com/freelawproject/reporters-db/${REPORTERS_DB_REF}/reporters_db/data/reporters.json`,
+  caseNameAbbreviations: `https://raw.githubusercontent.com/freelawproject/reporters-db/${REPORTERS_DB_REF}/reporters_db/data/case_name_abbreviations.json`,
+  stateAbbreviations: `https://raw.githubusercontent.com/freelawproject/reporters-db/${REPORTERS_DB_REF}/reporters_db/data/state_abbreviations.json`,
 };
 
 // The 21st-edition Table T6/T13.2 merger words (see ../caseNameAbbreviations.ts) are handled

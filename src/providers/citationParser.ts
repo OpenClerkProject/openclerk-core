@@ -16,7 +16,12 @@ const NAME_CONT_TOKEN = "(?:[A-Z][A-Za-z.'&-]*|&|of|the|and|for|a|an|ex|rel\\.?)
 // such suffixes in a row). Without this, the bare CASE_NAME token loop above has no way to cross
 // the comma before "Inc."/"Ltd." and the whole citation fails to match at all.
 const NAME_SUFFIX = "(?:,\\s+(?:Inc|Ltd|Co|Corp|LLC|L\\.L\\.C|L\\.P|LLP)\\.?)*";
-const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN})*${NAME_SUFFIX}`;
+// Bounding the continuation-token repeat (real Bluebook case names don't run past a handful of
+// words) keeps worst-case scan time roughly linear in document length. An unbounded `*` here let
+// long non-matching runs of capitalized tokens (an all-caps heading, a name-heavy appendix) drive
+// the regex engine into quadratic backtracking -- confirmed ~20s on a 150K-char adversarial input
+// before this bound was added.
+const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
 // A complete number token, e.g. the "745" in "745, 753" or the "349" in "349 F. Supp. 3d". The
 // trailing \b matters: without it, "\d+" happily matches just the "3" out of a reporter suffix like
 // "3d" (as in "F. Supp. 3d"), and since everything after the page number is optional, the regex
@@ -65,8 +70,17 @@ const LEADING_SIGNAL_REGEX =
 // Bluebook short-form case citation, e.g. "444 U.S. at 495" or, with a leading party-name
 // signal, "Liepelt, 444 U.S. at 495" (Rule 10.9). The literal " at " before the pincite is what
 // distinguishes a short form from a full citation's page number, which never uses "at".
+//
+// The reporter segment is bounded to {1,40} rather than left as an unbounded lazy `+?`: unlike
+// CASE_CITATION_REGEX (where a required literal " v " sharply limits how many positions the
+// expensive part of the pattern is even attempted from), the leading case name here is optional,
+// so a bare NUMBER can anchor an attempt at nearly every digit run in the text. With an unbounded
+// lazy reporter segment, each of those O(n) attempts re-scans the rest of the string looking for
+// a literal " at " that a document may never contain -- confirmed quadratic (~8s at ~109K chars,
+// ~25s at ~189K chars) before this bound was added. No real Bluebook reporter abbreviation runs
+// anywhere near 40 characters.
 const SHORT_FORM_REGEX = new RegExp(
-  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]+?)\\s+at\\s+(${PINCITE_PAGE})`,
+  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]{1,40}?)\\s+at\\s+(${PINCITE_PAGE})`,
   "g"
 );
 // "Id." short-form citation (Rule 10.9), referring back to whichever citation immediately
@@ -193,6 +207,33 @@ function normalizeCaseNameParty(party: string): string {
     .trim();
 }
 
+// One normalized party name "contains" another only when the shorter appears as a contiguous run
+// of whole words inside the longer (e.g. "delta airlines" inside "delta airlines inc"). A raw
+// String#includes here would defeat the whole verification this feeds: every string contains ""
+// (so a party that normalizes to empty -- ". v. ," parses fine -- matched anything), and short
+// fragments match on accident ("us", from "U.S.", is a substring of "columbus", so
+// "U.S. v. Smith" counted as verified by a lookup that actually returned "Columbus v. Smith").
+function partyWordsContain(container: string, contained: string): boolean {
+  const containerWords = container.split(" ").filter(Boolean);
+  const containedWords = contained.split(" ").filter(Boolean);
+  if (containedWords.length === 0 || containedWords.length > containerWords.length) {
+    return false;
+  }
+  for (let start = 0; start + containedWords.length <= containerWords.length; start++) {
+    let allEqual = true;
+    for (let offset = 0; offset < containedWords.length; offset++) {
+      if (containerWords[start + offset] !== containedWords[offset]) {
+        allEqual = false;
+        break;
+      }
+    }
+    if (allEqual) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Compares two full case names for a real correspondence, tolerating abbreviation differences (in
  * either direction) the same way caseNameMatchesToken does for short forms.
@@ -213,10 +254,14 @@ export function caseNamesMatch(a: string, b: string): boolean {
   const partiesB = b.split(/\s+v\.?\s+/i).map(normalizeCaseNameParty);
 
   if (partiesA.length !== 2 || partiesB.length !== 2) {
-    return normalizeCaseNameParty(a) === normalizeCaseNameParty(b);
+    const wholeA = normalizeCaseNameParty(a);
+    const wholeB = normalizeCaseNameParty(b);
+    // Two names that both normalize to nothing share no evidence of naming the same case.
+    return wholeA !== "" && wholeA === wholeB;
   }
 
-  const partyMatches = (p1: string, p2: string) => p1 === p2 || p1.includes(p2) || p2.includes(p1);
+  const partyMatches = (p1: string, p2: string) =>
+    (p1 !== "" && p1 === p2) || partyWordsContain(p1, p2) || partyWordsContain(p2, p1);
   return partyMatches(partiesA[0], partiesB[0]) && partyMatches(partiesA[1], partiesB[1]);
 }
 
