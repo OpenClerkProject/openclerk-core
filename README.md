@@ -60,7 +60,7 @@ session) before trusted publishing can be turned on for every release after that
 ```json
 {
   "dependencies": {
-    "openclerk-core": "^0.2.5"
+    "openclerk-core": "^0.2.6"
   }
 }
 ```
