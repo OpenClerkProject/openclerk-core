@@ -50,7 +50,7 @@ Not yet published to the npm registry — consume it as a git dependency:
 ```json
 {
   "dependencies": {
-    "openclerk-core": "github:OpenClerkProject/openclerk-core#v0.2.0"
+    "openclerk-core": "github:OpenClerkProject/openclerk-core#v0.2.4"
   }
 }
 ```
@@ -59,11 +59,20 @@ Not yet published to the npm registry — consume it as a git dependency:
 import { parseCaseCitation, bluebookRuleSetRegistry, citationProviderRegistry } from "openclerk-core";
 ```
 
+`lib/` (the compiled CommonJS + `.d.ts` output) is committed to this repo rather than built via a
+`prepare` lifecycle script. Git dependencies need `prepare` to run at install time to produce
+anything installable, but some npm setups gate lifecycle-script execution behind an
+`allowScripts` allowlist (see [npm's `allow-scripts`
+docs](https://docs.npmjs.com/cli/v11/commands/npm-approve-scripts)) that a fresh git dependency
+can't satisfy without manual per-consumer configuration — shipping prebuilt output sidesteps that
+entirely, at the cost of needing `npm run build` to be re-run and the diff committed whenever
+`src/` changes (CI enforces this — see `.github/workflows/ci.yml`).
+
 ## Development
 
 ```bash
 npm install
-npm run build   # compiles src/ -> lib/ (CommonJS + .d.ts)
+npm run build   # compiles src/ -> lib/ (CommonJS + .d.ts) -- commit the result if it changes
 npm test        # runs the Jest suite
 ```
 

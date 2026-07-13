@@ -18,6 +18,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Verify committed lib/ matches a fresh build
+        run: |
+          if ! git diff --exit-code -- lib; then
+            echo "::error::lib/ is out of date -- run 'npm run build' and commit the result."
+            exit 1
+          fi
 
   test:
     name: Test
