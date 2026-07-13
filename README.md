@@ -45,12 +45,15 @@ to be duplicated (or drift out of sync) across each platform integration.
 
 ## Usage
 
-Not yet published to the npm registry — consume it as a git dependency:
+Published to the npm registry — a CI workflow (`.github/workflows/publish.yml`) runs `npm
+publish` whenever a `vX.Y.Z` tag is pushed, using an `NPM_TOKEN` repo secret. `prepare` builds
+`src/` -> `lib/` at publish time, the same as any other npm package; consumers never run a build
+step themselves.
 
 ```json
 {
   "dependencies": {
-    "openclerk-core": "github:OpenClerkProject/openclerk-core#v0.2.0"
+    "openclerk-core": "^0.2.5"
   }
 }
 ```
@@ -59,6 +62,13 @@ Not yet published to the npm registry — consume it as a git dependency:
 import { parseCaseCitation, bluebookRuleSetRegistry, citationProviderRegistry } from "openclerk-core";
 ```
 
+(Earlier versions were consumed as a git dependency instead — abandoned because installing a git
+dependency requires its `prepare` script to run at install time on the *consumer's* machine, which
+some npm setups block behind an `allowScripts` allowlist that a fresh git dependency can't satisfy
+[due to a known npm/cli bug](https://github.com/npm/cli/issues/9450), even with an explicit
+`allowScripts` entry. Registry installs don't have this problem: `prepare` only ever runs once, at
+publish time, on this repo's own CI.)
+
 ## Development
 
 ```bash
@@ -66,6 +76,10 @@ npm install
 npm run build   # compiles src/ -> lib/ (CommonJS + .d.ts)
 npm test        # runs the Jest suite
 ```
+
+To cut a release: bump `version` in `package.json`, merge, then `git tag vX.Y.Z && git push origin
+vX.Y.Z` — the tag push triggers the publish workflow, which fails closed if the tag doesn't match
+`package.json`'s version.
 
 To pick up upstream reporters-db updates:
 
