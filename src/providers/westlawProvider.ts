@@ -1,4 +1,5 @@
 import { CitationMatch, ParsedCitation, ProviderCredentialField } from "./types";
+import { getHttpClient } from "../http";
 import { EnterpriseCitationProvider, fetchClientCredentialsToken, trimTrailingSlash } from "./base";
 
 /**
@@ -42,7 +43,7 @@ export class WestlawProvider extends EnterpriseCitationProvider {
 
     try {
       const baseUrl = trimTrailingSlash(this.credentials.apiBaseUrl);
-      const response = await fetch(`${baseUrl}${SEARCH_PATH}`, {
+      const response = await getHttpClient().fetch(`${baseUrl}${SEARCH_PATH}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

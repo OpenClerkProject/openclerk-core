@@ -9,6 +9,15 @@ export {
 
 export * from "./providers";
 export {
+  HttpClient,
+  HttpResponse,
+  HttpRequestInit,
+  HttpRequestBody,
+  setHttpClient,
+  getHttpClient,
+  resetHttpClient,
+} from "./http";
+export {
   EnterpriseCitationProvider,
   trimTrailingSlash,
   fetchClientCredentialsToken,

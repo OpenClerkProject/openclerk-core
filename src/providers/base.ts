@@ -1,4 +1,5 @@
 import { CitationProvider, CitationMatch, ParsedCitation, ProviderCredentialField } from "./types";
+import { getHttpClient } from "../http";
 
 /**
  * Base class for providers backed by a paid/contract-gated research API
@@ -65,7 +66,7 @@ export async function fetchClientCredentialsToken(
   clientId: string,
   clientSecret: string
 ): Promise<string> {
-  const response = await fetch(tokenUrl, {
+  const response = await getHttpClient().fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
