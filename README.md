@@ -46,9 +46,16 @@ to be duplicated (or drift out of sync) across each platform integration.
 ## Usage
 
 Published to the npm registry — a CI workflow (`.github/workflows/publish.yml`) runs `npm
-publish` whenever a `vX.Y.Z` tag is pushed, using an `NPM_TOKEN` repo secret. `prepare` builds
-`src/` -> `lib/` at publish time, the same as any other npm package; consumers never run a build
-step themselves.
+publish` whenever a `vX.Y.Z` tag is pushed, authenticated via [npm Trusted
+Publishing](https://docs.npmjs.com/trusted-publishers/) (OIDC) rather than a stored token: no
+`NPM_TOKEN` secret exists in this repo. `prepare` builds `src/` -> `lib/` at publish time, the
+same as any other npm package; consumers never run a build step themselves.
+
+Trusted Publishing requires a one-time setup on npmjs.com's package settings page (Settings ->
+Trusted Publisher -> GitHub Actions), specifying this org/repo/workflow filename exactly. npm
+doesn't allow configuring a trusted publisher for a package that doesn't exist yet, so the very
+first publish of a new package has to happen manually (`npm publish` from an authenticated local
+session) before trusted publishing can be turned on for every release after that.
 
 ```json
 {

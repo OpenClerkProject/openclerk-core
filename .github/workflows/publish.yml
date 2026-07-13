@@ -19,6 +19,8 @@ jobs:
           node-version: 20
           cache: npm
           registry-url: https://registry.npmjs.org
+      # Trusted Publishing (OIDC) needs npm >= 11.5.1; Node 20's bundled npm predates that.
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -30,6 +32,9 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
             exit 1
           fi
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No NPM_TOKEN: npm CLI >= 11.5.1 detects the OIDC context from `id-token: write` above and
+      # authenticates directly with the registry using a short-lived token tied to this exact
+      # workflow -- provenance is generated automatically under trusted publishing, so
+      # --provenance isn't needed either. Requires a trusted publisher configured for this package
+      # on npmjs.com (org/repo/workflow filename must match exactly) -- see README.md.
+      - run: npm publish --access public
