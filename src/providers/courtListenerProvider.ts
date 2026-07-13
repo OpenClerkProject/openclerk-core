@@ -7,6 +7,7 @@ import {
   RateLimitAwareProvider,
 } from "./types";
 import { extractPageExcerpt, stripHtmlTags } from "./opinionTextExtractor";
+import { getHttpClient, HttpResponse } from "../http";
 
 const API_BASE = "https://www.courtlistener.com/api/rest/v4";
 const SITE_ORIGIN = "https://www.courtlistener.com";
@@ -103,7 +104,7 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
       return null;
     }
 
-    let response: Response;
+    let response: HttpResponse;
     try {
       response = await this.request(this.apiToken, text);
     } catch {
@@ -178,7 +179,7 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
 
     let opinions: CourtListenerOpinion[];
     try {
-      const response = await fetch(`${API_BASE}/opinions/?cluster=${encodeURIComponent(clusterResult.clusterId)}`, {
+      const response = await getHttpClient().fetch(`${API_BASE}/opinions/?cluster=${encodeURIComponent(clusterResult.clusterId)}`, {
         headers: { Authorization: `Token ${this.apiToken}` },
       });
       if (response.status === 429) {
@@ -217,7 +218,7 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
    * document with several pincite citations, not just as a rare edge case.
    */
   private async resolveClusterId(text: string): Promise<{ clusterId: string | null; rateLimited?: boolean }> {
-    let response: Response;
+    let response: HttpResponse;
     try {
       response = await this.request(this.apiToken, text);
     } catch {
@@ -256,7 +257,7 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
     return { clusterId: null };
   }
 
-  private request(token: string | null, text: string): Promise<Response> {
+  private request(token: string | null, text: string): Promise<HttpResponse> {
     const headers: Record<string, string> = {
       "Content-Type": "application/x-www-form-urlencoded",
     };
@@ -264,7 +265,7 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
       headers["Authorization"] = `Token ${token}`;
     }
 
-    return fetch(`${API_BASE}/citation-lookup/`, {
+    return getHttpClient().fetch(`${API_BASE}/citation-lookup/`, {
       method: "POST",
       headers,
       body: new URLSearchParams({ text }),
