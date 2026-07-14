@@ -281,3 +281,68 @@ rather than a fabricated one getting verified.
   they verify skip name checking entirely — but with today's providers
   (CourtListener returns names) it is a reasonable trade-off against
   false hallucination flags.
+
+---
+
+# Round 3 — 2026-07-12
+
+Delta pass over what landed on `main` after rounds 1–2 merged (PR #5): the
+new HTTP-client indirection (`src/http.ts`) that all providers now route
+through, the npm Trusted-Publishing workflow (`.github/workflows/publish.yml`),
+and the lockfile/version churn (0.2.6, jest 30). Also re-verified rounds
+1–2's fixes survived into `main`.
+
+## Verified clean in round 3 (no change needed)
+
+- **HTTP-client indirection (`src/http.ts`) doesn't weaken any guarantee.**
+  Providers now call `getHttpClient().fetch(url, init)` instead of the
+  global `fetch` directly, so a host without `fetch` (Apps Script) can
+  inject a `UrlFetchApp`-backed client. The default client
+  (`fetchHttpClient`) is a pure pass-through to global `fetch` — it does
+  **no URL rewriting and no scheme manipulation**. The `https://`
+  enforcement on the user-supplied enterprise `apiBaseUrl` is still in
+  `src/providers/base.ts:36`, unchanged; there is no `http://` anywhere in
+  `src/`. Auth headers and request bodies are forwarded verbatim. Net
+  effect on the security model: none.
+- **Rounds 1–2 fixes intact on `main`:** `escapeRegExp` (`src/utils.ts`),
+  the `{0,12}` `CASE_NAME` bound and `{1,40}` `SHORT_FORM_REGEX` reporter
+  bound (`src/providers/citationParser.ts`), and the whole-word
+  `partyWordsContain` fix in `caseNamesMatch` are all present. Re-ran the
+  adversarial benchmark on the merged build: `extractCaseCitations` 12ms
+  and `extractCitationTokens` 122ms at ~1.5M chars — still linear.
+- **`npm audit` — 0 vulnerabilities** (prod and full tree) after the
+  lockfile churn.
+- **169 tests pass**, including the new `tests/http.test.ts`.
+
+## Findings documented only (round 3)
+
+### E. `setHttpClient` is a process-global, mutable singleton
+`src/http.ts` stores the active `HttpClient` in a module-level `let` swapped
+via `setHttpClient()`. Any code running in the same JS context can replace
+the client and thereby intercept every provider request (URLs, auth
+headers, responses). This is acceptable for the intended single-tenant
+hosts (one Word task-pane session; one Apps Script execution) and is the
+conventional shape for this kind of adapter, but it is worth stating
+explicitly: the indirection is a capability, not a boundary — it assumes
+all code in the host process is equally trusted. No change recommended for
+the current hosts; a future multi-tenant/server embedding should pass an
+`HttpClient` explicitly rather than rely on the global.
+
+### F. `publish.yml` supply-chain review — sound, one minor note
+`.github/workflows/publish.yml` (npm publish on `v*` tags) is well
+constructed: it uses npm **Trusted Publishing via OIDC**
+(`permissions: id-token: write`, `contents: read`, no long-lived
+`NPM_TOKEN`), runs `npm ci`/`build`/`test` before publishing, and guards
+that the git tag matches `package.json` version. Provenance is generated
+automatically. Publishing is gated on who can push a `v*` tag (repo
+maintainers). One minor note: the step `npm install -g npm@latest` pulls an
+unpinned npm at publish time — a compromised npm release could run in the
+publish job. Low risk given the job's minimal permissions (no secrets
+beyond the short-lived OIDC token, which is scoped to publishing this one
+package), but pinning npm to a known-good major/version would remove it.
+
+## Out of scope (unchanged)
+
+`openclerk-gdocs` is audited separately (now has its own
+`SECURITY_AUDIT.md`); `openclerk-libreoffice` is still LICENSE + README
+only. `openclerk-word` had no new code beyond its merged PRs this round.
