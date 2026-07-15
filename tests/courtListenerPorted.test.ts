@@ -1,4 +1,10 @@
-import { parseCaseCitation, extractCaseCitations } from '../src/providers/citationParser';
+import {
+  parseCaseCitation,
+  extractCaseCitations,
+  extractCitationTokens,
+  clusterCitationTokens,
+  findOrphanedCitations,
+} from '../src/providers/citationParser';
 import {
   normalizeReporterSpacing,
   setReporterSpacingNormalizationEnabled,
@@ -141,6 +147,92 @@ describe('CourtListener ported tests: reporter-spacing normalization', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.reporter).toBe(expected);
     expect(parsed!.reporterRaw).toBe(reporterForm);
+  });
+});
+
+describe('CourtListener ported tests: short-form citation resolution (TEST-02)', () => {
+  // Source: cl/citations/tests.py, class CitationObjectTest, method test_citation_resolution
+  // (DB-dependent Django ORM/do_resolve_citations parts out of scope per PROJECT.md; the portable
+  // part is the *shape* of a short-form antecedent resolving to its preceding full citation).
+  // This exact fixture string is drawn from this phase's own Success Criteria #1 example
+  // ("515 U.S., at 240"-style comma-before-"at" short form) -- Finding 1 (02-RESEARCH.md): the
+  // comma-before-"at" convention was previously invisible to the entire extraction pipeline.
+  test('bare comma-before-"at" short form is extracted and clusters to its preceding full citation', () => {
+    const text = 'Roe v. Wade, 410 U.S. 113 (1973) held that... As the Court noted, 410 U.S., at 165, ...';
+    const tokens = extractCitationTokens(text);
+    expect(tokens.some((t) => t.type === 'short' && t.raw.includes('410 U.S., at 165'))).toBe(true);
+    const clusters = clusterCitationTokens(tokens);
+    expect(clusters[0].tokens.length).toBe(2); // full + the short form
+  });
+
+  // Source: cl/citations/tests.py, class CitationObjectTest, method test_citation_resolution --
+  // adapted to exercise parseCaseCitation directly (Finding 1). The case-name-prefixed form is
+  // used (rather than a bare short form) per the same 02-RESEARCH.md/STATE.md correction Phase 1
+  // made: a bare short form has no leading case name to anchor parseCaseCitation's grammar.
+  test('case-name-prefixed comma-before-"at" short form parses via parseCaseCitation', () => {
+    const parsed = parseCaseCitation('Roe, 410 U.S., at 165');
+    expect(parsed).not.toBeNull();
+    expect(parsed!.isShortForm).toBe(true);
+    expect(parsed!.reporter).toBe('U.S.');
+  });
+
+  // Source: cl/citations/tests.py, class CitationObjectTest, method test_citation_resolution --
+  // adapted from the "short1_or_3_tiebreaker" fixture shape (a short form whose reporter+volume
+  // match more than one full citation must be resolved by its OWN locator, not by recency).
+  // Finding 2 (02-RESEARCH.md): before the fix, a nameless short form always attached to the
+  // most-recently-seen full citation regardless of its own volume/reporter.
+  test('bare short form resolves to the full citation whose OWN reporter/volume match, not merely the most recent one', () => {
+    const text =
+      'Marbury v. Madison, 5 U.S. 137 (1803) established judicial review. Later, in Youngstown Sheet & Tube Co. v. Sawyer, 343 U.S. 579 (1952), the Court addressed executive power. As discussed in 5 U.S. at 140, the holding was significant.';
+    const clusters = clusterCitationTokens(extractCitationTokens(text));
+    const marburyCluster = clusters.find((c) => c.caseName === 'Marbury v. Madison');
+    expect(marburyCluster).toBeDefined();
+    expect(marburyCluster!.tokens.some((t) => t.type === 'short')).toBe(true);
+  });
+});
+
+describe('CourtListener ported tests: supra citation resolution (TEST-03, regression lock)', () => {
+  // Source: cl/citations/tests.py, class CitationObjectTest, method test_citation_resolution --
+  // adapted "supra" fixture shape. SUPRA_REGEX already extracts this correctly (it already uses
+  // the ",?\s+at\s+" shape Finding 1 ports to the short-form regexes); this is a regression lock
+  // confirming supra resolution still works once caseNameMatchesToken is routed through the
+  // hardened whole-word-containment helpers (Finding 3 / FIX-03).
+  test('supra citation resolves to the correct preceding full citation', () => {
+    const text =
+      'Norfolk & W. Ry. Co. v. Liepelt, 444 U.S. 490 (1980) established the standard. Later, Liepelt, supra, at 495, the Court reaffirmed the holding.';
+    const clusters = clusterCitationTokens(extractCitationTokens(text));
+    expect(clusters[0].caseName).toBe('Norfolk & W. Ry. Co. v. Liepelt');
+    expect(clusters[0].tokens.some((t) => t.type === 'supra')).toBe(true);
+  });
+});
+
+// Not a CourtListener-ported fixture (the underlying Django/DB "MULTIPLE_MATCHES"-shaped tests
+// are out of scope per PROJECT.md), but the exact bypass class SECURITY_AUDIT.md round 2 finding 5
+// documented and fixed in caseNamesMatch (a raw-substring name-fragment match, e.g. "us" matching
+// inside "columbus") -- reproduced here in caseNameMatchesToken, the sibling comparator
+// clusterCitationTokens actually calls, which round 2's patch never touched (Finding 3 / FIX-03).
+describe('caseNameMatchesToken / clusterCitationTokens: short-fragment substring bypass (FIX-03)', () => {
+  test('a short-fragment name part does not falsely cluster under an unrelated case containing it as a raw substring', () => {
+    const text = 'Blair v. United States, 250 U.S. 273 (1919) held X. Later, Air, 250 U.S. at 280, was discussed.';
+    const orphans = findOrphanedCitations(text);
+    expect(orphans.some((t) => t.raw.includes('Air'))).toBe(true);
+  });
+
+  // Single-letter party name -- mirrors the already-fixed "A v. B" vs "Acme Corp. v. Bright Co."
+  // probe from SECURITY_AUDIT.md round 2 finding 5, now exercised through the short-form
+  // clustering path (caseNameMatchesToken) instead of caseNamesMatch.
+  test('single-letter name part does not falsely match a multi-word case name containing that letter', () => {
+    const text = 'Acme Corp. v. Bright Co., 10 F.3d 20 (1990) held Y. Later, A, 10 F.3d at 25, was discussed.';
+    const orphans = findOrphanedCitations(text);
+    expect(orphans.some((t) => t.raw.includes('A,'))).toBe(true);
+  });
+
+  // Legitimate abbreviation match must still work after the fix (regression guard) -- confirms
+  // the rewrite doesn't overcorrect into rejecting real Bluebook short-form abbreviations.
+  test('legitimate corporate-suffix name part still resolves correctly', () => {
+    const text = 'Norfolk & W. Ry. Co. v. Liepelt, 444 U.S. 490 (1980) held Z. Later, Liepelt, 444 U.S. at 495, ...';
+    const clusters = clusterCitationTokens(extractCitationTokens(text));
+    expect(clusters[0].tokens.length).toBe(2);
   });
 });
 
