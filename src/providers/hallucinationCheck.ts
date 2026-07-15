@@ -19,6 +19,14 @@ export interface HallucinationCheckResult {
    * locator resolves to a genuine, unrelated case.
    */
   nameMismatch?: { provider: string; foundCaseName: string };
+  /**
+   * Set when a provider's lookup resolved this citation's locator to more than one distinct
+   * candidate case that couldn't be narrowed by case name. A real locator exists, but the
+   * confidence signal differs from a clean single-candidate match -- the caller decides what
+   * "possible hallucination" means from an ambiguous result, exactly as documented for
+   * `nameMismatch` above.
+   */
+  ambiguousMatch?: { provider: string; candidateCount: number };
 }
 
 /**

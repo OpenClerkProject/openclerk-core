@@ -65,6 +65,14 @@ export interface CitationMatch {
   caseName?: string;
   /** Normalized citation string returned by the provider, if any. */
   citation?: string;
+  /**
+   * Set when the provider's lookup resolved this citation's locator (reporter/volume/page) to
+   * more than one distinct candidate case and case-name matching could not narrow it to exactly
+   * one -- e.g. CourtListener returning multiple clusters for the same reporter/volume/page.
+   * `url`/`caseName` still reflect a best-guess candidate; callers should not treat this match
+   * as a confident single-case resolution.
+   */
+  ambiguousMatch?: { candidateCount: number };
 }
 
 export interface ProviderCredentialField {

@@ -11,6 +11,8 @@ import {
   isReporterSpacingNormalizationEnabled,
   resetReporterSpacingNormalization,
 } from '../src/utils';
+import { CourtListenerProvider } from '../src/providers/courtListenerProvider';
+import { checkCitationsForHallucinations } from '../src/providers/hallucinationCheck';
 
 describe('CourtListener ported tests: reporter-spacing normalization', () => {
   // Source: cl/citations/tests.py, class CitationTextTest, method
@@ -203,6 +205,149 @@ describe('CourtListener ported tests: supra citation resolution (TEST-03, regres
     const clusters = clusterCitationTokens(extractCitationTokens(text));
     expect(clusters[0].caseName).toBe('Norfolk & W. Ry. Co. v. Liepelt');
     expect(clusters[0].tokens.some((t) => t.type === 'supra')).toBe(true);
+  });
+});
+
+// Source: cl/citations/tests.py, class CitationObjectTest, method test_citation_multiple_matches --
+// that test's DB/ORM/Elasticsearch setup (resolve_fullcase_citation, real Opinion/cluster fixtures,
+// the rendered "class=\"citation multiple-matches\"" HTML annotation) is out of scope per PROJECT.md,
+// but its core assertion -- a citation-lookup response with multiple clusters must be surfaced as
+// ambiguous, not silently collapsed to the first -- is directly portable here via
+// CourtListenerProvider's mocked HttpClient (see tests/providers.test.ts's authenticatedProvider
+// helper/mockFetch pattern, copied below). Finding 4 (02-RESEARCH.md): before this fix,
+// CourtListenerProvider.lookupCitation took result.clusters[0] unconditionally, even when
+// result.clusters.length > 1 -- exactly the "false verified" silent-collapse failure this
+// project's Core Value forbids.
+describe('CourtListener ported tests: ambiguous-match resolution (TEST-04, FIX-02)', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  async function authenticatedProvider(mockFetch: jest.Mock): Promise<CourtListenerProvider> {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] });
+    const provider = new CourtListenerProvider();
+    await provider.authenticate({ apiToken: 'secret-token' });
+    return provider;
+  }
+
+  test('lookupCitation flags ambiguousMatch when the API returns multiple clusters and case name does not disambiguate', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = await authenticatedProvider(mockFetch);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          citation: '114 F.3d 1182',
+          status: 200,
+          clusters: [
+            { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+            { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+          ],
+        },
+      ],
+    });
+
+    // Neither cluster's case_name matches the citing document's own parsed case name, so
+    // case-name disambiguation cannot narrow this to a single confident match.
+    const match = await provider.lookupCitation({ raw: '114 F.3d 1182', caseName: 'Unrelated Party v. Another Party' });
+
+    expect(match).not.toBeNull();
+    expect(match!.ambiguousMatch).toEqual({ candidateCount: 2 });
+  });
+
+  test('lookupCitation resolves unambiguously when case name matches exactly one of several clusters', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = await authenticatedProvider(mockFetch);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          citation: '114 F.3d 1182',
+          status: 200,
+          clusters: [
+            { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+            { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+          ],
+        },
+      ],
+    });
+
+    const match = await provider.lookupCitation({ raw: '114 F.3d 1182', caseName: 'Smith v. Jones' });
+
+    expect(match).toEqual({
+      url: 'https://www.courtlistener.com/opinion/222/smith-v-jones/',
+      caseName: 'Smith v. Jones',
+      citation: '114 F.3d 1182',
+    });
+    expect(match!.ambiguousMatch).toBeUndefined();
+  });
+
+  test('checkCitationsForHallucinations reports ambiguousMatch as a distinct bucket, not verifiedVia or nameMismatch', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = await authenticatedProvider(mockFetch);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          citation: '114 F.3d 1182',
+          status: 200,
+          clusters: [
+            { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+            { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+          ],
+        },
+      ],
+    });
+
+    const results = await checkCitationsForHallucinations(
+      ['Unrelated Party v. Another Party, 114 F.3d 1182 (1997)'],
+      [provider]
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].verifiedVia).toBeNull();
+    expect(results[0].nameMismatch).toBeUndefined();
+    expect(results[0].ambiguousMatch).toEqual({ provider: 'CourtListener', candidateCount: 2 });
+  });
+
+  // Never-throw guard (FIX-02): an ambiguous provider result must not cause
+  // checkCitationsForHallucinations to reject/throw -- it's an additive if/continue branch, not a
+  // new failure path, preserving the library-wide "never throw on expected outcomes" contract.
+  test('checkCitationsForHallucinations resolves (does not reject/throw) when a provider returns an ambiguous match', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = await authenticatedProvider(mockFetch);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          citation: '114 F.3d 1182',
+          status: 200,
+          clusters: [
+            { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+            { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+          ],
+        },
+      ],
+    });
+
+    await expect(
+      checkCitationsForHallucinations(['Unrelated Party v. Another Party, 114 F.3d 1182 (1997)'], [provider])
+    ).resolves.toBeDefined();
   });
 });
 
