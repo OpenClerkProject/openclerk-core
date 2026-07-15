@@ -428,7 +428,15 @@ describe('normalizeReporterSpacing toggle: host opt-out for production issues', 
 // benchmark (four adversarial shapes at ~1.5-1.6M chars, all ≤1.3s) as a fail-fast CI artifact
 // rather than a one-off manual check.
 describe('SHORT_FORM_REGEX permanent ReDoS benchmark (adversarial input, not CourtListener-ported)', () => {
-  const WALL_CLOCK_CEILING_MS = 5000;
+  // 03-REVIEW.md WR-01: a hard wall-clock ceiling on multi-million-character regex scans is
+  // inherently sensitive to CI runner contention, cold V8 JIT warmup, and parallel test-worker
+  // scheduling -- none of which reflect an actual regex-complexity regression. Locally all four
+  // benchmarks below complete in ~1.3s or less (see research's first-pass benchmark, re-verified
+  // in the comment above this describe block), so 20000ms leaves a wide (~15x) safety margin for
+  // CI jitter/cold-start slowness without weakening the guard: a real quadratic-blowup regression
+  // reintroducing the ReDoS this benchmark protects against (SECURITY_AUDIT.md findings 1 and 4)
+  // would push runtime into many seconds-to-minutes at this input size, nowhere near this ceiling.
+  const WALL_CLOCK_CEILING_MS = 20000;
 
   test('digit-heavy bait: a long run of bare numbers with no reporter/"at" match completes fast', () => {
     // No case name, no reporter letters, no "at" -- SHORT_FORM_REGEX's optional name-part and
