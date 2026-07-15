@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 01
-current_phase_name: reporter-spacing-normalization
-status: verifying
+current_phase: 2
+current_phase_name: Short-Form, Supra & Ambiguous-Match Resolution
+status: planning
 stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-07-15T17:32:23.802Z"
+last_updated: "2026-07-15T19:29:30.944Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 01 execution started
+last_activity_desc: Phase 1 complete, transitioned to Phase 2
 progress:
   total_phases: 1
   completed_phases: 1
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Citations extracted and matched by this library must be correct and never silently wrong — a false "verified" or a missed hallucination undermines the entire point of the hallucination-check feature.
-**Current focus:** Phase 01 — reporter-spacing-normalization
+**Current focus:** Phase 2 — Short-Form, Supra & Ambiguous-Match Resolution
 
 ## Current Position
 
-Phase: 01 (reporter-spacing-normalization) — EXECUTING
-Plan: 1 of 1
-Status: Phase complete — ready for verification
-Last activity: 2026-07-15 — Phase 01 execution started
+Phase: 2 — Short-Form, Supra & Ambiguous-Match Resolution
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-15 — Phase 1 complete, transitioned to Phase 2
 
 Progress: [██████████] 100%
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 1
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -46,7 +46,7 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -80,9 +80,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- `citationParser.ts` has twice produced quadratic/ReDoS regexes during past feature work (see CONCERNS.md) — any new/modified regex in Phase 1 or Phase 2 must be benchmarked against adversarial input before merge.
+- `citationParser.ts` has twice produced quadratic/ReDoS regexes during past feature work (see CONCERNS.md) — any new/modified regex in Phase 2 must be benchmarked against adversarial input before merge.
 - `caseNamesMatch`/`normalizeCaseNameParty` (Phase 2) is a documented fragile area with two prior real bypasses fixed (empty-string substring bypass, short-fragment substring bypass) — new fixes need adversarial regression tests, not just fixture-based ones.
 - `hallucinationCheck.ts` fails open (reports "verified") when either parsed citation or provider match lacks a case name — a deliberate documented design choice to keep in mind when Phase 2's ambiguous-match tests are ported.
+- [Phase 1, resolved] A single-field normalization approach can silently break a downstream Bluebook-formatting consumer (CR-01/CR-02) — worth remembering as a general pattern if Phase 2's ambiguous-match fixes touch any field multiple downstream checks read (e.g. `caseName`).
+- IN-01 (info-level, non-blocking): `citationParser.ts:379,382-383,416,419-420` has inconsistent optional-chaining style (`reporter.trim()` vs `caseName?.trim()`). Cosmetic only, left unfixed (out of scope for the `critical_warning` code-review-fix pass).
 
 ### Quick Tasks Completed
 
@@ -100,8 +102,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T17:32:23.761Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-07-15T19:30:00.000Z
+Stopped at: Phase 1 complete (UAT signed off, PR #16 open), ready to plan Phase 2
 Resume file: None
-
-Last activity: 2026-07-15 - Completed quick task 260715-ki4: Add a way to disable normalizeReporterSpacing so host integrations can opt out if a problem is found in production

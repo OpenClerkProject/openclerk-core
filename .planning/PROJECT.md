@@ -18,11 +18,12 @@ Citations extracted and matched by this library must be correct and never silent
 - ✓ [Existing capability] Bluebook rule-set validation across three editions (`src/bluebook/`) — existing
 - ✓ [Existing capability] Host-environment-agnostic HTTP transport via swappable `HttpClient` (`src/http.ts`) — existing
 - ✓ [Existing capability] In-memory-only credential handling for enterprise providers (`src/providers/base.ts`) — existing
+- ✓ Reporter-spacing/regex normalization edge cases ported from CourtListener into `tests/courtListenerPorted.test.ts`, and the reporter-spacing bug they exposed fixed via `normalizeReporterSpacing` + a `ParsedCitation.reporterRaw`/`reporter` field split (so Bluebook formatting checks still see as-written text while citation matching treats spacing variants as equivalent) — Phase 1
+- ✓ Opt-out toggle for reporter-spacing normalization (`setReporterSpacingNormalizationEnabled`/`isReporterSpacingNormalizationEnabled`/`resetReporterSpacingNormalization`, mirroring the `http.ts` swappable-client pattern) — emerged during Phase 1 UAT sign-off as a risk mitigation, shipped as a quick task
 
 ### Active
 
-- [ ] Port applicable test cases from CourtListener's own citation test suite (`cl/citations/tests.py`) into a new dedicated test file, covering four portable categories:
-  - [ ] Reporter-spacing/regex normalization edge cases (e.g. `"22 U. S. 33"` must still match `"22 U.S. 33"`)
+- [ ] Port applicable test cases from CourtListener's own citation test suite (`cl/citations/tests.py`) into a new dedicated test file, covering the remaining three portable categories:
   - [ ] Short-form and `supra`-style citation resolution requiring a preceding full citation
   - [ ] Ambiguous-match detection — citations that should resolve to multiple candidates rather than a false single match
   - [ ] HTML-escaping / case-name-with-punctuation safety (quotes, ampersands, script-injection-shaped input)
@@ -58,9 +59,11 @@ Source material for this work: `https://github.com/freelawproject/courtlistener/
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Port only 4 of ~9 CourtListener test categories | Most CourtListener tests depend on Django ORM/DB/Elasticsearch that doesn't exist in this standalone library; only parsing/matching/escaping logic is portable | — Pending |
-| New dedicated test file rather than extending existing test files | Keeps CourtListener-sourced cases traceable to their origin | — Pending |
-| Scope includes fixing bugs the ported tests expose, not just adding tests | User explicitly confirmed "tests + fixes" over "tests only" | — Pending |
+| Port only 4 of ~9 CourtListener test categories | Most CourtListener tests depend on Django ORM/DB/Elasticsearch that doesn't exist in this standalone library; only parsing/matching/escaping logic is portable | ✓ Good |
+| New dedicated test file rather than extending existing test files | Keeps CourtListener-sourced cases traceable to their origin | ✓ Good |
+| Scope includes fixing bugs the ported tests expose, not just adding tests | User explicitly confirmed "tests + fixes" over "tests only" | ✓ Good — Phase 1 code review found and fixed 2 real regressions (CR-01/CR-02) this scope decision would have missed |
+| Split `ParsedCitation.reporter` into normalized (`reporter`) and as-written (`reporterRaw`) fields | Code review found that normalizing `reporter` at the source silently defeated the Bluebook reporter-format checker for 138 documented reporters-db typo entries (CR-02); a single field couldn't serve both citation-matching and Bluebook-formatting needs | ✓ Good — Phase 1 |
+| Add an opt-out toggle for `normalizeReporterSpacing` | Requested during UAT sign-off as a production safety net for a heuristic-based fix, mirroring the existing `http.ts` swappable-client pattern; defaults to enabled, fully backward compatible | ✓ Good — shipped as quick task 260715-ki4 |
 
 ## Evolution
 
@@ -80,4 +83,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 after initialization*
+*Last updated: 2026-07-15 after Phase 1*
