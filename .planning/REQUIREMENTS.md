@@ -13,8 +13,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **TEST-02**: Short-form citations (e.g. `"515 U.S., at 240"`) resolve correctly when a preceding full citation exists in the same text
 - [x] **TEST-03**: `supra`-style citations resolve to the correct preceding full citation
 - [x] **TEST-04**: Citations with ambiguous volume/reporter/page triples are flagged as multiple-candidate matches rather than falsely resolved to a single match
-- [ ] **TEST-05**: Case names containing quotes, ampersands, and script-injection-shaped strings are safely escaped in any HTML-rendering path
-- [ ] **TEST-06**: A new dedicated test file (`tests/courtListenerPorted.test.ts`) exists covering TEST-01 through TEST-05, with each ported case traceable in a comment to its source test in `cl/citations/tests.py`
+- [x] **TEST-05**: Case names containing quotes, ampersands, and script-injection-shaped strings are safely escaped in any HTML-rendering path
+- [x] **TEST-06**: A new dedicated test file (`tests/courtListenerPorted.test.ts`) exists covering TEST-01 through TEST-05, with each ported case traceable in a comment to its source test in `cl/citations/tests.py`
 
 ### Bug Fixes
 
@@ -48,8 +48,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-02 | Phase 2 | Complete |
 | TEST-03 | Phase 2 | Complete |
 | TEST-04 | Phase 2 | Complete |
-| TEST-05 | Phase 3 | Pending |
-| TEST-06 | Phase 3 | Pending |
+| TEST-05 | Phase 3 | Complete |
+| TEST-06 | Phase 3 | Complete |
 | FIX-01 | Phase 1 | Complete |
 | FIX-02 | Phase 2 | Complete |
 | FIX-03 | Phase 2 | Complete |
