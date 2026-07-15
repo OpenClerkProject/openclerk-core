@@ -10,9 +10,13 @@ import {
   setReporterSpacingNormalizationEnabled,
   isReporterSpacingNormalizationEnabled,
   resetReporterSpacingNormalization,
+  escapeHtml,
+  stripHtmlHyperlinks,
+  isSafeHyperlinkUrl,
 } from '../src/utils';
 import { CourtListenerProvider } from '../src/providers/courtListenerProvider';
 import { checkCitationsForHallucinations } from '../src/providers/hallucinationCheck';
+import { stripHtmlTags } from '../src/providers/opinionTextExtractor';
 
 describe('CourtListener ported tests: reporter-spacing normalization', () => {
   // Source: cl/citations/tests.py, class CitationTextTest, method
@@ -462,5 +466,78 @@ describe('SHORT_FORM_REGEX permanent ReDoS benchmark (adversarial input, not Cou
     const tokens = extractCitationTokens(text);
     expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
     expect(tokens.some((t) => t.type === 'short' && t.raw.includes('410 U.S., at 165'))).toBe(true);
+  });
+});
+
+// Source: cl/citations/tests.py, class CitationTextTest, method test_unsafe_case_names --
+// CourtListener asserts these case names survive Django's HTML-attribute escaping and
+// BeautifulSoup's attribute-decoding round trip unchanged. This library has no HTML-rendering
+// pipeline of its own (per 03-CONTEXT.md's scope decision), so the portable equivalent is:
+// escapeHtml produces the correct entity-escaped form, and stripHtmlHyperlinks decodes it back
+// losslessly -- the same "escape then decode" round trip CourtListener's test exercises via a
+// different mechanism (BeautifulSoup attribute parsing vs. this library's own decode helper).
+describe('CourtListener ported tests: case-name HTML-escaping safety (TEST-05)', () => {
+  test.each([
+    ["Farmers ' High Line Canal & Reservoir Co. v. New Hampshire Real Estate Co."],
+    ["Barmore v '"],
+    ['Shamokin, Pa.", (Leaflet in Case) Misnamed? \',' ],
+  ])('escapeHtml escapes and round-trips case name %j losslessly through stripHtmlHyperlinks', (caseName) => {
+    const escaped = escapeHtml(caseName);
+    expect(escaped).not.toContain('<');
+    expect(stripHtmlHyperlinks(escaped)).toBe(caseName);
+  });
+
+  // Source: cl/citations/tests.py, class CitationTextTest, method
+  // test_make_html_from_plain_text -- "Plaintext with HTML text (see Alexis Hunley v.
+  // Instagram, LLC)" fixture. CourtListener's expected escaped output (Django's escape()) is
+  // reproduced verbatim below; this library's escapeHtml must match it character-for-character.
+  // NOTE: this library escapes ' to &#39;, NOT Django's &#x27; -- this specific fixture has no
+  // lone apostrophe, so the divergence doesn't surface here, but the expected string below is
+  // still adapted per this library's own encoding contract (src/utils.ts escapeHtml), not
+  // blindly copied from Django's source.
+  test('escapeHtml matches CourtListener\'s expected escaped output for a literal <script> tag', () => {
+    const input = '<script async src="//www.instagram.com/embed.js"></script>';
+    const expected =
+      '&lt;script async src=&quot;//www.instagram.com/embed.js&quot;&gt;&lt;/script&gt;';
+    expect(escapeHtml(input)).toBe(expected);
+  });
+
+  // Same fixture, opposite direction: confirm the two markup-stripping helpers neutralize the
+  // tag entirely rather than leaking it as text.
+  test('stripHtmlTags and stripHtmlHyperlinks both fully remove a literal <script> tag', () => {
+    const input = '<script async src="//www.instagram.com/embed.js"></script>';
+    expect(stripHtmlTags(input)).toBe('');
+    expect(stripHtmlHyperlinks(input)).toBe('');
+  });
+
+  // Regression test mirroring the existing stripHtmlTags guard (tests/opinionText.test.ts:104-108)
+  // -- SECURITY_AUDIT.md finding 3 fixed this exact bug in stripHtmlHyperlinks; this closes the
+  // coverage gap where only the sibling function stripHtmlTags had an explicit assertion. Not a
+  // CourtListener-ported fixture.
+  test('stripHtmlHyperlinks does not double-unescape a literal "&amp;lt;" into "<"', () => {
+    expect(stripHtmlHyperlinks('&amp;lt;')).toBe('&lt;');
+  });
+
+  // Not a CourtListener-ported fixture -- extends tests/utils.test.ts's existing scheme coverage
+  // (javascript:/vbscript:/data: already tested there) with case-variation and control-character-
+  // split bypass shapes, per SECURITY_AUDIT.md's scheme-allowlist threat model (T-03-02).
+  test.each([
+    'javascript:alert(1)',
+    'JAVASCRIPT:alert(1)',
+    'vbscript:msgbox(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'java\tscript:alert(1)',
+  ])('isSafeHyperlinkUrl rejects unsafe scheme shape %j', (url) => {
+    expect(isSafeHyperlinkUrl(url)).toBe(false);
+  });
+
+  // Not a CourtListener-ported fixture -- a PROHIBITION guard (SECURITY_AUDIT.md finding B):
+  // isSafeHyperlinkUrl's contract is scheme safety only, not a host allowlist. A protocol-relative
+  // URL resolves against the function's own https://placeholder.invalid/ base to an https: scheme,
+  // which is allowed by design. This is documented, intentional scope -- NOT a bug -- so this
+  // assertion must stay toBe(true) and must never be "fixed" to toBe(false); host-level
+  // allowlisting is a separately-tracked, explicitly-deferred concern.
+  test('isSafeHyperlinkUrl returns true for a protocol-relative URL (documented scheme-only scope, not a bug)', () => {
+    expect(isSafeHyperlinkUrl('//evil.example/x.js')).toBe(true);
   });
 });
