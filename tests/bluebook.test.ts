@@ -173,10 +173,17 @@ describe('reporter abbreviation checks (vendored reporters-db Table T1 data)', (
   });
 
   test('flags a known non-standard reporter form with the correct suggestion', () => {
-    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 F. 2d 456 (2d Cir. 2010)'));
+    // Fixture updated in Phase 1 (reporter-spacing normalization): "F. 2d" is no longer usable
+    // here because parseCaseCitation now normalizes single-capital-letter reporter spacing at
+    // the source (Bluebook Rule 6.1 "closing up"), so "F. 2d" arrives already as "F.2d" -- a
+    // valid Table T1 form -- before this check ever runs. "App. Div. 2d" is a multi-letter-token
+    // reporter form with its own recorded reporters-db correction that the new normalizer does
+    // not touch (it only closes up single-capital-letter tokens), so it still reaches this check
+    // unnormalized and continues to exercise the same reporter-nonstandard-form path.
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 App. Div. 2d 456 (2d Cir. 2010)'));
     const flagged = issues.find((i) => i.ruleId === 'reporter-nonstandard-form');
     expect(flagged).toBeDefined();
-    expect(flagged?.message).toContain('F.2d');
+    expect(flagged?.message).toContain('A.D.2d');
   });
 
   test('flags an ordinal-form reporter typo generically, not just the ~13 reporters reporters-db happens to list', () => {
@@ -204,9 +211,12 @@ describe('reporter abbreviation checks (vendored reporters-db Table T1 data)', (
   });
 
   test('a specific reporters-db correction still wins over the generic spacing check', () => {
-    // "F. 2d" already has a recorded reporters-db correction to "F.2d" -- confirms the new
-    // generic spacing check doesn't shadow the existing, more specific message.
-    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 F. 2d 456 (2d Cir. 2010)'));
+    // Fixture updated in Phase 1 (reporter-spacing normalization) -- see comment on the previous
+    // test: "F. 2d" is now normalized to "F.2d" (a valid form) before this check runs, so it no
+    // longer exercises this path. "App. Div. 2d" already has a recorded reporters-db correction
+    // to "A.D.2d" and is unaffected by the new single-capital-letter normalizer -- confirms the
+    // generic spacing check still doesn't shadow the existing, more specific message.
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 App. Div. 2d 456 (2d Cir. 2010)'));
     expect(issues.some((i) => i.ruleId === 'reporter-nonstandard-form')).toBe(true);
     expect(issues.some((i) => i.ruleId === 'reporter-spacing')).toBe(false);
   });

@@ -1,4 +1,4 @@
-import { normalizeText } from "../utils";
+import { normalizeText, normalizeReporterSpacing } from "../utils";
 import { ParsedCitation } from "./types";
 
 // A case-name "word" is either a capitalized token (Norfolk, W., Ry., Co., State, York...), the
@@ -380,7 +380,7 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
       raw,
       caseName: caseName?.trim(),
       volume: volume?.trim(),
-      reporter: reporter?.trim(),
+      reporter: normalizeReporterSpacing(reporter.trim()),
       page: page?.trim(),
     };
     if (pincite) {
@@ -415,7 +415,7 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
       raw,
       caseName: caseName?.trim(),
       volume: volume?.trim(),
-      reporter: reporter?.trim(),
+      reporter: normalizeReporterSpacing(reporter.trim()),
       pincite: pincite?.trim(),
       isShortForm: true,
     };
