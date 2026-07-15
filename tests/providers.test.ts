@@ -438,6 +438,45 @@ describe('CourtListenerProvider', () => {
     expect(provider.isAuthenticated()).toBe(true);
   });
 
+  // Regression test for 02-REVIEW.md WR-02: when case-name matching narrows the candidate
+  // clusters to MORE than one (but not exactly one), the old fallback discarded those name-matched
+  // candidates entirely and fell back to whichever cluster happened to be first in the raw API
+  // response -- which may not even be one of the name-matched candidates. This asserts the fix
+  // prefers a name-matched candidate over the unfiltered first-in-response fallback.
+  test('WR-02 regression: prefers a name-matched candidate over an unfiltered fallback when 2+ clusters match by name', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = await authenticatedProvider(mockFetch);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          citation: '10 F.3d 20',
+          status: 200,
+          clusters: [
+            // First in the raw response, but does not match the citation's case name at all.
+            { case_name: 'Acme Corp. v. Widget Co.', absolute_url: '/opinion/999/acme-widget/' },
+            // Both of these tolerate-match "Smith v. Jones" via caseNamesMatch's abbreviation
+            // handling, so named.length === 2 -- not exactly one, so `disambiguated` is undefined.
+            { case_name: 'Smith v. Jones', absolute_url: '/opinion/111/smith-v-jones/' },
+            { case_name: 'Smith v. Jones, Inc.', absolute_url: '/opinion/222/smith-v-jones-inc/' },
+          ],
+        },
+      ],
+    });
+
+    const match = await provider.lookupCitation({ raw: '10 F.3d 20', caseName: 'Smith v. Jones' });
+
+    expect(match).not.toBeNull();
+    expect(match!.ambiguousMatch).toEqual({ candidateCount: 3 });
+    // Must be one of the name-matched candidates, never the unrelated first-in-response cluster.
+    expect(match!.caseName).not.toBe('Acme Corp. v. Widget Co.');
+    expect(match!.caseName).toBe('Smith v. Jones');
+    expect(match!.url).toBe('https://www.courtlistener.com/opinion/111/smith-v-jones/');
+  });
+
   describe('rate-limit awareness (supportsRateLimitAwareness)', () => {
     test('wasLastRequestRateLimited() is false before any lookup', () => {
       expect(new CourtListenerProvider().wasLastRequestRateLimited()).toBe(false);

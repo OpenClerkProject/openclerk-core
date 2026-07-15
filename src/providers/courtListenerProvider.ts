@@ -147,7 +147,11 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
           ? result.clusters.filter((c) => c.case_name && caseNamesMatch(citation.caseName!, c.case_name))
           : [];
         const disambiguated = named.length === 1 ? named[0] : undefined;
-        const bestGuess = disambiguated ?? result.clusters.find((c) => c.absolute_url);
+        // WR-02 (02-REVIEW.md): when named.length > 1 (multiple clusters' case names match the
+        // citing document's own case name), prefer a name-matched candidate over an unfiltered
+        // fallback -- whichever cluster happens to be first in the raw response may not even be
+        // one of the `named` candidates, a strictly worse guess than picking from `named` itself.
+        const bestGuess = disambiguated ?? named.find((c) => c.absolute_url) ?? result.clusters.find((c) => c.absolute_url);
         if (!bestGuess || !bestGuess.absolute_url) {
           continue;
         }
