@@ -430,6 +430,46 @@ describe('CourtListenerProvider', () => {
     expect(provider.isAuthenticated()).toBe(false);
   });
 
+  // Regression test for 02-REVIEW.md WR-03 (gap 1): a network failure during the verification
+  // request used to reject with whatever raw error the fetch implementation threw, not the
+  // descriptive Error this module's convention (and CLAUDE.md's error-handling section) calls for
+  // at setup time.
+  test('authenticate() surfaces a descriptive error (not a raw one) on a network failure during verification', async () => {
+    const mockFetch = jest.fn().mockRejectedValue(new Error('network down'));
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new CourtListenerProvider();
+
+    await expect(provider.authenticate({ apiToken: 'secret-token' })).rejects.toThrow(
+      /Could not reach CourtListener to verify the API token/
+    );
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
+  // Regression test for 02-REVIEW.md WR-03 (gap 2): any response status other than 401/403 (a
+  // 500, a 429 rate-limit, a malformed response) used to be treated as "token accepted," silently
+  // storing (and later using) a token that was never actually confirmed valid.
+  test('authenticate() rejects the token when verification returns a non-ok, non-401/403 response (e.g. 500)', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new CourtListenerProvider();
+
+    await expect(provider.authenticate({ apiToken: 'secret-token' })).rejects.toThrow(
+      /Could not verify the API token/
+    );
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
+  test('authenticate() rejects the token when verification is rate-limited (429), rather than accepting it unverified', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({ ok: false, status: 429, json: async () => ({ detail: 'Request was throttled.' }) });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new CourtListenerProvider();
+
+    await expect(provider.authenticate({ apiToken: 'secret-token' })).rejects.toThrow(
+      /Could not verify the API token/
+    );
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
   test('is authenticated once connected with a real token', async () => {
     const mockFetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
     global.fetch = mockFetch as unknown as typeof fetch;

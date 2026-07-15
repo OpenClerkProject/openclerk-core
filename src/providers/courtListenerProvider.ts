@@ -81,9 +81,22 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
       throw new Error("CourtListener requires an API token.");
     }
 
-    const response = await this.request(token, "1 U.S. 1");
+    // WR-03 (02-REVIEW.md): wrap the verification request so a network failure surfaces the
+    // module's documented descriptive Error at setup time (per CLAUDE.md's error-handling
+    // convention) rather than whatever raw error the fetch implementation throws.
+    let response: HttpResponse;
+    try {
+      response = await this.request(token, "1 U.S. 1");
+    } catch {
+      throw new Error("Could not reach CourtListener to verify the API token.");
+    }
     if (response.status === 401 || response.status === 403) {
       throw new Error("CourtListener rejected the supplied API token.");
+    }
+    // WR-03: any other non-ok response (500, 429, malformed response, etc.) means the token was
+    // never actually confirmed valid -- do not silently store (and later use) an unverified token.
+    if (!response.ok) {
+      throw new Error("Could not verify the API token; CourtListener returned an unexpected response.");
     }
 
     this.apiToken = token;
