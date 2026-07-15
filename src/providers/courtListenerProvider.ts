@@ -8,6 +8,7 @@ import {
 } from "./types";
 import { extractPageExcerpt, stripHtmlTags } from "./opinionTextExtractor";
 import { getHttpClient, HttpResponse } from "../http";
+import { caseNamesMatch } from "./citationParser";
 
 const API_BASE = "https://www.courtlistener.com/api/rest/v4";
 const SITE_ORIGIN = "https://www.courtlistener.com";
@@ -80,9 +81,22 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
       throw new Error("CourtListener requires an API token.");
     }
 
-    const response = await this.request(token, "1 U.S. 1");
+    // WR-03 (02-REVIEW.md): wrap the verification request so a network failure surfaces the
+    // module's documented descriptive Error at setup time (per CLAUDE.md's error-handling
+    // convention) rather than whatever raw error the fetch implementation throws.
+    let response: HttpResponse;
+    try {
+      response = await this.request(token, "1 U.S. 1");
+    } catch {
+      throw new Error("Could not reach CourtListener to verify the API token.");
+    }
     if (response.status === 401 || response.status === 403) {
       throw new Error("CourtListener rejected the supplied API token.");
+    }
+    // WR-03: any other non-ok response (500, 429, malformed response, etc.) means the token was
+    // never actually confirmed valid -- do not silently store (and later use) an unverified token.
+    if (!response.ok) {
+      throw new Error("Could not verify the API token; CourtListener returned an unexpected response.");
     }
 
     this.apiToken = token;
@@ -136,6 +150,35 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
         continue;
       }
 
+      // Finding 4 (02-RESEARCH.md): a locator can genuinely resolve to more than one real case
+      // (e.g. duplicate/parallel citation records). Silently taking clusters[0] here would be the
+      // exact "false verified" outcome this project's Core Value forbids. Try to disambiguate by
+      // case name first (reusing the same caseNamesMatch the hallucination check itself trusts);
+      // only flag ambiguousMatch when that can't narrow it to exactly one candidate.
+      if (result.clusters.length > 1) {
+        const named = citation.caseName
+          ? result.clusters.filter((c) => c.case_name && caseNamesMatch(citation.caseName!, c.case_name))
+          : [];
+        const disambiguated = named.length === 1 ? named[0] : undefined;
+        // WR-02 (02-REVIEW.md): when named.length > 1 (multiple clusters' case names match the
+        // citing document's own case name), prefer a name-matched candidate over an unfiltered
+        // fallback -- whichever cluster happens to be first in the raw response may not even be
+        // one of the `named` candidates, a strictly worse guess than picking from `named` itself.
+        const bestGuess = disambiguated ?? named.find((c) => c.absolute_url) ?? result.clusters.find((c) => c.absolute_url);
+        if (!bestGuess || !bestGuess.absolute_url) {
+          continue;
+        }
+        const match: CitationMatch = {
+          url: `${SITE_ORIGIN}${bestGuess.absolute_url}`,
+          caseName: bestGuess.case_name,
+          citation: result.citation,
+        };
+        if (!disambiguated) {
+          match.ambiguousMatch = { candidateCount: result.clusters.length };
+        }
+        return match;
+      }
+
       const cluster = result.clusters[0];
       if (!cluster.absolute_url) {
         continue;
@@ -169,9 +212,18 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
       return { excerpt: null };
     }
 
-    const clusterResult = await this.resolveClusterId(text);
+    const clusterResult = await this.resolveClusterId(text, citation.caseName);
     if (clusterResult.rateLimited) {
       return { excerpt: null, rateLimited: true };
+    }
+    // CR-01 (02-REVIEW.md): a locator that resolved to more than one distinct candidate case,
+    // with case-name matching unable to narrow it to exactly one, must not silently proceed to
+    // fetch and return that best-guess candidate's opinion text -- attaching the wrong case's
+    // text into the document under this citation would be a stronger, more damaging version of
+    // the "false verified" problem than a wrong hyperlink (fabricated-looking supporting text,
+    // not just a bad link).
+    if (clusterResult.ambiguousMatch) {
+      return { excerpt: null, ambiguousMatch: clusterResult.ambiguousMatch };
     }
     if (!clusterResult.clusterId) {
       return { excerpt: null };
@@ -216,8 +268,18 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
    * minute, 50/hour, 125/day (https://www.courtlistener.com/help/api/rest/) -- fetchOpinionExcerpt
    * makes two requests per citation, so a 429 here is expected to happen in normal use on a
    * document with several pincite citations, not just as a rare edge case.
+   *
+   * CR-01 (02-REVIEW.md): applies the same disambiguation as lookupCitation's clusters.length > 1
+   * branch -- a locator can genuinely resolve to more than one real case (e.g. duplicate/parallel
+   * citation records). Silently taking clusters[0] here would let fetchOpinionExcerpt attach the
+   * wrong case's opinion text into the document, a stronger "false verified" failure than a wrong
+   * hyperlink. Try to disambiguate by case name first; only report ambiguousMatch when that can't
+   * narrow it to exactly one candidate.
    */
-  private async resolveClusterId(text: string): Promise<{ clusterId: string | null; rateLimited?: boolean }> {
+  private async resolveClusterId(
+    text: string,
+    caseName?: string
+  ): Promise<{ clusterId: string | null; rateLimited?: boolean; ambiguousMatch?: { candidateCount: number } }> {
     let response: HttpResponse;
     try {
       response = await this.request(this.apiToken, text);
@@ -247,6 +309,26 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
       if (result.status !== 200 || !Array.isArray(result.clusters) || result.clusters.length === 0) {
         continue;
       }
+
+      if (result.clusters.length > 1) {
+        const named = caseName
+          ? result.clusters.filter((c) => c.case_name && caseNamesMatch(caseName, c.case_name))
+          : [];
+        const disambiguated = named.length === 1 ? named[0] : undefined;
+        if (!disambiguated) {
+          // WR-02 (02-REVIEW.md) applies here too, but there is no "bestGuess" to return for the
+          // opinion-text path -- fetchOpinionExcerpt refuses to fetch at all once ambiguousMatch
+          // is set, so the candidateCount is all that's surfaced.
+          return { clusterId: null, ambiguousMatch: { candidateCount: result.clusters.length } };
+        }
+        const absoluteUrl = disambiguated.absolute_url;
+        const idMatch = absoluteUrl && absoluteUrl.match(/^\/opinion\/(\d+)\//);
+        if (idMatch) {
+          return { clusterId: idMatch[1] };
+        }
+        continue;
+      }
+
       const absoluteUrl = result.clusters[0].absolute_url;
       const idMatch = absoluteUrl && absoluteUrl.match(/^\/opinion\/(\d+)\//);
       if (idMatch) {

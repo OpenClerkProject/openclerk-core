@@ -173,10 +173,17 @@ describe('reporter abbreviation checks (vendored reporters-db Table T1 data)', (
   });
 
   test('flags a known non-standard reporter form with the correct suggestion', () => {
-    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 F. 2d 456 (2d Cir. 2010)'));
+    // Fixture updated in Phase 1 (reporter-spacing normalization): "F. 2d" is no longer usable
+    // here because parseCaseCitation now normalizes single-capital-letter reporter spacing at
+    // the source (Bluebook Rule 6.1 "closing up"), so "F. 2d" arrives already as "F.2d" -- a
+    // valid Table T1 form -- before this check ever runs. "App. Div. 2d" is a multi-letter-token
+    // reporter form with its own recorded reporters-db correction that the new normalizer does
+    // not touch (it only closes up single-capital-letter tokens), so it still reaches this check
+    // unnormalized and continues to exercise the same reporter-nonstandard-form path.
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 App. Div. 2d 456 (2d Cir. 2010)'));
     const flagged = issues.find((i) => i.ruleId === 'reporter-nonstandard-form');
     expect(flagged).toBeDefined();
-    expect(flagged?.message).toContain('F.2d');
+    expect(flagged?.message).toContain('A.D.2d');
   });
 
   test('flags an ordinal-form reporter typo generically, not just the ~13 reporters reporters-db happens to list', () => {
@@ -204,11 +211,77 @@ describe('reporter abbreviation checks (vendored reporters-db Table T1 data)', (
   });
 
   test('a specific reporters-db correction still wins over the generic spacing check', () => {
-    // "F. 2d" already has a recorded reporters-db correction to "F.2d" -- confirms the new
-    // generic spacing check doesn't shadow the existing, more specific message.
-    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 F. 2d 456 (2d Cir. 2010)'));
+    // Fixture updated in Phase 1 (reporter-spacing normalization) -- see comment on the previous
+    // test: "F. 2d" is now normalized to "F.2d" (a valid form) before this check runs, so it no
+    // longer exercises this path. "App. Div. 2d" already has a recorded reporters-db correction
+    // to "A.D.2d" and is unaffected by the new single-capital-letter normalizer -- confirms the
+    // generic spacing check still doesn't shadow the existing, more specific message.
+    const issues = checkCommonCaseCitationRules(parseOrThrow('Smith v. Jones, 123 App. Div. 2d 456 (2d Cir. 2010)'));
     expect(issues.some((i) => i.ruleId === 'reporter-nonstandard-form')).toBe(true);
     expect(issues.some((i) => i.ruleId === 'reporter-spacing')).toBe(false);
+  });
+
+  // Regression tests for 01-REVIEW.md CR-02: normalizeReporterSpacing (src/utils.ts), wired into
+  // parseCaseCitation in Phase 1, must not silently "fix" a reporter string that reporters-db
+  // records as a documented non-standard form -- otherwise checkReporterAbbreviation never gets a
+  // chance to flag it, and a citation with a real Rule 6.1 mistake is reported as having zero
+  // reporter issues. Verified end-to-end before this fix (see 01-REVIEW.md CR-02): "F. 2d" arrived
+  // at this check already collapsed to "F.2d" -- a valid Table T1 form -- producing `[]` instead
+  // of a reporter-nonstandard-form issue.
+  test.each([
+    ['F. 2d', 'F.2d'],
+    ['C. C. A.', 'C.C.A.'],
+    ['N. E. 2d', 'N.E.2d'],
+  ])(
+    'reporter-nonstandard-form still fires for "%s" after parseCaseCitation normalization',
+    (reporterForm, correctForm) => {
+      const issues = checkCommonCaseCitationRules(
+        parseOrThrow(`Smith v. Jones, 123 ${reporterForm} 456 (2d Cir. 2010)`)
+      );
+      const flagged = issues.find((i) => i.ruleId === 'reporter-nonstandard-form');
+      expect(flagged).toBeDefined();
+      expect(flagged?.message).toContain(correctForm);
+    }
+  );
+
+  // Follow-up to 01-REVIEW.md CR-02 (see 01-REVIEW-FIX.md addendum): the three forms above were
+  // the only ones the original CR-02 fix protected via a hand-curated RESERVED_REPORTER_SPACING_FORMS
+  // allowlist in src/utils.ts. That allowlist has since been removed for this category -- the fix
+  // now works generally, via ParsedCitation.reporterRaw (populated in citationParser.ts, read by
+  // checkReporterAbbreviation in reporterRules.ts) -- so any of the ~138 reporters-db
+  // "corrections"-table entries this normalizer's positional heuristic would collapse should now be
+  // correctly flagged, not just the 3 originally named in the review. These four are additional,
+  // previously-unprotected corrections-table entries (verified against
+  // src/bluebook/generated/reporterAbbreviations.generated.ts) chosen to prove the general fix,
+  // not just the special-cased ones above.
+  test.each([
+    ['F. 3d', 'F.3d'],
+    ['N. W. 2d', 'N.W.2d'],
+    ['S. E. 2d', 'S.E.2d'],
+    ['S. W. 2d', 'S.W.2d'],
+  ])(
+    'reporter-nonstandard-form fires for the previously-unprotected corrections-table entry "%s"',
+    (reporterForm, correctForm) => {
+      const issues = checkCommonCaseCitationRules(
+        parseOrThrow(`Smith v. Jones, 123 ${reporterForm} 456 (2d Cir. 2010)`)
+      );
+      const flagged = issues.find((i) => i.ruleId === 'reporter-nonstandard-form');
+      expect(flagged).toBeDefined();
+      expect(flagged?.message).toContain(correctForm);
+    }
+  );
+
+  // The reporterRaw split must not regress the citation-matching behavior TEST-01 and CR-01
+  // depend on: `reporter` is still normalized for matching, even for these newly-unprotected forms.
+  test.each([
+    ['F. 3d', 'F.3d'],
+    ['N. W. 2d', 'N.W.2d'],
+    ['S. E. 2d', 'S.E.2d'],
+    ['S. W. 2d', 'S.W.2d'],
+  ])('"%s" still normalizes to "%s" in the matching-oriented reporter field', (reporterForm, expected) => {
+    const parsed = parseOrThrow(`Smith v. Jones, 123 ${reporterForm} 456 (2d Cir. 2010)`);
+    expect(parsed.reporter).toBe(expected);
+    expect(parsed.reporterRaw).toBe(reporterForm);
   });
 });
 

@@ -13,6 +13,18 @@ export interface ParsedCitation {
   caseName?: string;
   volume?: string;
   reporter?: string;
+  /**
+   * The reporter abbreviation exactly as it appeared in the source citation, before
+   * `normalizeReporterSpacing` (src/utils.ts) collapses spacing in single-capital-letter tokens
+   * (e.g. "U. S." -> "U.S."). `reporter` is normalized for citation *matching/lookup* purposes
+   * (so "U. S." and "U.S." resolve to the same reporter); `reporterRaw` preserves the as-written
+   * text so Bluebook *formatting* checks (see checkReporterAbbreviation in
+   * src/bluebook/reporterRules.ts) can still see -- and flag -- a genuine Rule 6.1 spacing mistake
+   * that the matching-oriented normalization would otherwise silently hide. Use this field (not
+   * `reporter`) whenever checking Bluebook formatting rules. Unset only when `reporter` itself is
+   * unset (no reporter was parsed at all).
+   */
+  reporterRaw?: string;
   page?: string;
   /** Pinpoint page/range, e.g. "496" or "705-06" in "..., 490, 496 (1980)". */
   pincite?: string;
@@ -53,6 +65,14 @@ export interface CitationMatch {
   caseName?: string;
   /** Normalized citation string returned by the provider, if any. */
   citation?: string;
+  /**
+   * Set when the provider's lookup resolved this citation's locator (reporter/volume/page) to
+   * more than one distinct candidate case and case-name matching could not narrow it to exactly
+   * one -- e.g. CourtListener returning multiple clusters for the same reporter/volume/page.
+   * `url`/`caseName` still reflect a best-guess candidate; callers should not treat this match
+   * as a confident single-case resolution.
+   */
+  ambiguousMatch?: { candidateCount: number };
 }
 
 export interface ProviderCredentialField {
@@ -97,6 +117,15 @@ export interface OpinionExcerptResult {
    * callers should tell the user to wait and retry, not report this the same as "not found".
    */
   rateLimited?: boolean;
+  /**
+   * Set when the provider's lookup resolved this citation's locator (reporter/volume/page) to
+   * more than one distinct candidate case and case-name matching could not narrow it to exactly
+   * one -- mirrors `CitationMatch.ambiguousMatch`. When set, `excerpt` is always null: attaching
+   * one candidate's opinion text into the document under an ambiguous citation would be a
+   * stronger, more damaging version of the "false verified" problem than a plain wrong hyperlink,
+   * since it inserts fabricated-looking supporting text rather than just a link.
+   */
+  ambiguousMatch?: { candidateCount: number };
 }
 
 /**

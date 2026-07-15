@@ -1,4 +1,4 @@
-import { normalizeText } from "../utils";
+import { normalizeText, normalizeReporterSpacing } from "../utils";
 import { ParsedCitation } from "./types";
 
 // A case-name "word" is either a capitalized token (Norfolk, W., Ry., Co., State, York...), the
@@ -48,8 +48,11 @@ const CASE_CITATION_REGEX = new RegExp(
 // cite, and a pincite introduced by the literal "at" instead of a bare page number. "at" is what
 // makes this reliably distinguishable from ordinary prose despite the otherwise-loose case-name
 // token pattern.
+// FIX #1 (02-RESEARCH.md Finding 1): the comma is optional before "at" -- mirrors SUPRA_REGEX's
+// already-correct ",?\s+at\s+" shape below -- so the U.S. Reports/SCOTUS-style convention that
+// puts a comma before "at" (e.g. "515 U.S., at 240") is not silently invisible to this scanner.
 const SHORT_FORM_CITATION_REGEX = new RegExp(
-  `${CASE_NAME},\\s*${NUMBER}\\s+[A-Za-z0-9.&' ]+?\\s+at\\s+${PINCITE_LIST}`,
+  `${CASE_NAME},\\s*${NUMBER}\\s+[A-Za-z0-9.&' ]+?,?\\s+at\\s+${PINCITE_LIST}`,
   "g"
 );
 // An "Id." citation (Rule 10.9(b)/4.1), e.g. "Id. at 715" or "Id. at 719 n.2" -- refers back to
@@ -79,8 +82,12 @@ const LEADING_SIGNAL_REGEX =
 // a literal " at " that a document may never contain -- confirmed quadratic (~8s at ~109K chars,
 // ~25s at ~189K chars) before this bound was added. No real Bluebook reporter abbreviation runs
 // anywhere near 40 characters.
+// FIX #1 (02-RESEARCH.md Finding 1): optional comma before "at", same shape as SUPRA_REGEX.
+// The {1,40}? reporter bound above is an unrelated, already-verified ReDoS-safety fix -- kept
+// exactly as-is; the reporter character class still excludes commas, so a lazy scan still stops
+// at the first comma it hits, and the new ",?" only optionally consumes that one comma.
 const SHORT_FORM_REGEX = new RegExp(
-  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]{1,40}?)\\s+at\\s+(${PINCITE_PAGE})`,
+  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]{1,40}?),?\\s+at\\s+(${PINCITE_PAGE})`,
   "g"
 );
 // "Id." short-form citation (Rule 10.9), referring back to whichever citation immediately
@@ -109,6 +116,13 @@ export interface CitationToken {
   namePart?: string;
   /** Pinpoint page (or range) this token references, if any. */
   pincite?: string;
+  /**
+   * For "short" tokens only: the volume/reporter this token's own regex match captured (FIX #2 /
+   * 02-RESEARCH.md Finding 2) -- lets clustering resolve a nameless short form by its own locator
+   * instead of blindly attaching to whichever full citation was most recently seen.
+   */
+  volume?: string;
+  reporter?: string;
 }
 
 // text.matchAll() returns an iterator that isn't a plain array, so a `for...of` directly over it
@@ -146,13 +160,18 @@ export function extractCitationTokens(text: string): CitationToken[] {
 
   for (const match of matchAllToArray(text, SHORT_FORM_REGEX)) {
     if (match.index === undefined || withinFullSpan(match.index)) continue;
-    const [, namePart, , , pincite] = match;
+    // FIX #2 (02-RESEARCH.md Finding 2): capture volume/reporter (groups 2/3) instead of
+    // discarding them -- clusterCitationTokens needs these to resolve a nameless short form by
+    // its own locator rather than always falling back to the most-recently-seen full citation.
+    const [, namePart, volume, reporter, pincite] = match;
     tokens.push({
       type: "short",
       raw: normalizeText(match[0]),
       index: match.index,
       namePart: namePart ? normalizeNamePart(namePart) : undefined,
       pincite: pincite ? normalizeText(pincite) : undefined,
+      volume: volume ? volume.trim() : undefined,
+      reporter: reporter ? normalizeReporterSpacing(reporter.trim()) : undefined,
     });
   }
 
@@ -185,18 +204,40 @@ export interface CitationCluster {
   /** The full citation that anchors this cluster -- identifies which case it refers to. */
   leadCitation: string;
   caseName?: string;
+  /**
+   * The leadCitation's own volume/reporter (FIX #2 / 02-RESEARCH.md Finding 2), captured once at
+   * cluster-creation time (same parseCaseCitation call that produces caseName) so a nameless
+   * short-form token can be matched to the cluster whose locator it actually names, without a
+   * second regex pass per token.
+   */
+  volume?: string;
+  reporter?: string;
   tokens: CitationToken[];
 }
 
 // A short-form/supra name fragment ("Liepelt") is treated as referring to a cluster's case name
 // ("Norfolk & W. Ry. Co. v. Liepelt") when it matches (in either direction, to tolerate
 // abbreviation differences) one of the two party names split on " v. ".
+//
+// FIX #3 (02-RESEARCH.md Finding 3 / FIX-03): this used to do its own raw `.toLowerCase()` +
+// `.includes()` comparison -- a second, independent case-name-comparison implementation that
+// never received the whole-word-containment hardening caseNamesMatch got in SECURITY_AUDIT.md
+// round 2 finding 5. That let a short fragment ("Air") falsely match as a raw substring of an
+// unrelated case name ("Blair v. United States"). Rewritten to delegate to the same hardened
+// normalizeCaseNameParty/partyWordsContain helpers caseNamesMatch uses, so this bypass class
+// cannot recur in a third comparator.
 function caseNameMatchesToken(caseName: string, namePart: string): boolean {
-  const normalizedNamePart = namePart.toLowerCase().replace(/\.$/, "");
+  const normalizedNamePart = normalizeCaseNameParty(namePart);
+  if (!normalizedNamePart) return false;
   return caseName
     .split(/\s+v\.?\s+/i)
-    .map((party) => party.toLowerCase())
-    .some((party) => party.includes(normalizedNamePart) || normalizedNamePart.includes(party));
+    .map(normalizeCaseNameParty)
+    .some(
+      (party) =>
+        (party !== "" && party === normalizedNamePart) ||
+        partyWordsContain(party, normalizedNamePart) ||
+        partyWordsContain(normalizedNamePart, party)
+    );
 }
 
 function normalizeCaseNameParty(party: string): string {
@@ -281,7 +322,13 @@ export function clusterCitationTokens(tokens: CitationToken[]): CitationCluster[
   for (const token of tokens) {
     if (token.type === "full") {
       const parsed = parseCaseCitation(token.raw);
-      const cluster: CitationCluster = { leadCitation: token.raw, caseName: parsed?.caseName, tokens: [token] };
+      const cluster: CitationCluster = {
+        leadCitation: token.raw,
+        caseName: parsed?.caseName,
+        volume: parsed?.volume,
+        reporter: parsed?.reporter,
+        tokens: [token],
+      };
       clusters.push(cluster);
       lastCluster = cluster;
       continue;
@@ -298,6 +345,15 @@ export function clusterCitationTokens(tokens: CitationToken[]): CitationCluster[
     let target: CitationCluster | undefined;
     if (token.namePart) {
       target = [...clusters].reverse().find((cluster) => cluster.caseName && caseNameMatchesToken(cluster.caseName, token.namePart!));
+    } else if (token.volume && token.reporter) {
+      // FIX #2 (02-RESEARCH.md Finding 2): a nameless short form must resolve by its OWN
+      // volume+reporter locator before falling back to whichever full citation was most recently
+      // seen -- otherwise a bare short form always misattaches to the most recent citation even
+      // when an earlier cluster's own reporter/volume is the one it actually matches.
+      target =
+        [...clusters].reverse().find((cluster) => cluster.volume === token.volume && cluster.reporter === token.reporter) ??
+        lastCluster ??
+        undefined;
     } else {
       target = lastCluster ?? undefined;
     }
@@ -376,11 +432,13 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
 
   if (match) {
     const [, caseName, volume, reporter, page, pincite, parenthetical] = match;
+    const reporterTrimmed = reporter.trim();
     const parsed: ParsedCitation = {
       raw,
       caseName: caseName?.trim(),
       volume: volume?.trim(),
-      reporter: reporter?.trim(),
+      reporter: normalizeReporterSpacing(reporterTrimmed),
+      reporterRaw: reporterTrimmed,
       page: page?.trim(),
     };
     if (pincite) {
@@ -405,17 +463,22 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
 
   // Fall back to the short-form pattern (Rule 10.9), e.g. "Rundo, 990 F.3d at 712" -- no
   // court/year parenthetical, since a short form refers back to a case cited in full elsewhere.
+  // FIX #1 (02-RESEARCH.md Finding 1): comma before "at" is optional, matching SUPRA_REGEX's
+  // existing ",?\s+at\s+" shape, so a U.S. Reports/SCOTUS-style short form like "Roe, 410 U.S.,
+  // at 165" parses instead of silently returning null.
   const shortMatch = raw.match(
-    new RegExp(`^(${CASE_NAME}),\\s*(${NUMBER})\\s+([A-Za-z0-9.&' ]+?)\\s+at\\s+(${PINCITE_LIST})\\s*$`)
+    new RegExp(`^(${CASE_NAME}),\\s*(${NUMBER})\\s+([A-Za-z0-9.&' ]+?),?\\s+at\\s+(${PINCITE_LIST})\\s*$`)
   );
 
   if (shortMatch) {
     const [, caseName, volume, reporter, pincite] = shortMatch;
+    const reporterTrimmed = reporter.trim();
     return {
       raw,
       caseName: caseName?.trim(),
       volume: volume?.trim(),
-      reporter: reporter?.trim(),
+      reporter: normalizeReporterSpacing(reporterTrimmed),
+      reporterRaw: reporterTrimmed,
       pincite: pincite?.trim(),
       isShortForm: true,
     };

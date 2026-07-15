@@ -14,6 +14,7 @@ describe('parseCaseCitation', () => {
       caseName: 'Norfolk & W. Ry. Co. v. Liepelt',
       volume: '444',
       reporter: 'U.S.',
+      reporterRaw: 'U.S.',
       page: '490',
       court: 'U.S.Ill.',
       year: '1980',
@@ -33,6 +34,7 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
       caseName: 'Brown v. Board of Education',
       volume: '347',
       reporter: 'U.S.',
+      reporterRaw: 'U.S.',
       page: '483',
       year: '1954',
     });
@@ -127,6 +129,7 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
       caseName: 'Darlingh v. Maddaleni',
       volume: '142',
       reporter: 'F.4th',
+      reporterRaw: 'F.4th',
       page: '558',
       pincite: '567 n.1',
       court: '7th Cir.',
@@ -161,6 +164,7 @@ describe('parseCaseCitation: short-form citations (Rule 10.9)', () => {
       caseName: 'Rundo',
       volume: '990',
       reporter: 'F.3d',
+      reporterRaw: 'F.3d',
       pincite: '712',
       isShortForm: true,
     });
@@ -426,12 +430,91 @@ describe('CourtListenerProvider', () => {
     expect(provider.isAuthenticated()).toBe(false);
   });
 
+  // Regression test for 02-REVIEW.md WR-03 (gap 1): a network failure during the verification
+  // request used to reject with whatever raw error the fetch implementation threw, not the
+  // descriptive Error this module's convention (and CLAUDE.md's error-handling section) calls for
+  // at setup time.
+  test('authenticate() surfaces a descriptive error (not a raw one) on a network failure during verification', async () => {
+    const mockFetch = jest.fn().mockRejectedValue(new Error('network down'));
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new CourtListenerProvider();
+
+    await expect(provider.authenticate({ apiToken: 'secret-token' })).rejects.toThrow(
+      /Could not reach CourtListener to verify the API token/
+    );
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
+  // Regression test for 02-REVIEW.md WR-03 (gap 2): any response status other than 401/403 (a
+  // 500, a 429 rate-limit, a malformed response) used to be treated as "token accepted," silently
+  // storing (and later using) a token that was never actually confirmed valid.
+  test('authenticate() rejects the token when verification returns a non-ok, non-401/403 response (e.g. 500)', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new CourtListenerProvider();
+
+    await expect(provider.authenticate({ apiToken: 'secret-token' })).rejects.toThrow(
+      /Could not verify the API token/
+    );
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
+  test('authenticate() rejects the token when verification is rate-limited (429), rather than accepting it unverified', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({ ok: false, status: 429, json: async () => ({ detail: 'Request was throttled.' }) });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new CourtListenerProvider();
+
+    await expect(provider.authenticate({ apiToken: 'secret-token' })).rejects.toThrow(
+      /Could not verify the API token/
+    );
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
   test('is authenticated once connected with a real token', async () => {
     const mockFetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [] });
     global.fetch = mockFetch as unknown as typeof fetch;
     const provider = new CourtListenerProvider();
     await provider.authenticate({ apiToken: 'secret-token' });
     expect(provider.isAuthenticated()).toBe(true);
+  });
+
+  // Regression test for 02-REVIEW.md WR-02: when case-name matching narrows the candidate
+  // clusters to MORE than one (but not exactly one), the old fallback discarded those name-matched
+  // candidates entirely and fell back to whichever cluster happened to be first in the raw API
+  // response -- which may not even be one of the name-matched candidates. This asserts the fix
+  // prefers a name-matched candidate over the unfiltered first-in-response fallback.
+  test('WR-02 regression: prefers a name-matched candidate over an unfiltered fallback when 2+ clusters match by name', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = await authenticatedProvider(mockFetch);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          citation: '10 F.3d 20',
+          status: 200,
+          clusters: [
+            // First in the raw response, but does not match the citation's case name at all.
+            { case_name: 'Acme Corp. v. Widget Co.', absolute_url: '/opinion/999/acme-widget/' },
+            // Both of these tolerate-match "Smith v. Jones" via caseNamesMatch's abbreviation
+            // handling, so named.length === 2 -- not exactly one, so `disambiguated` is undefined.
+            { case_name: 'Smith v. Jones', absolute_url: '/opinion/111/smith-v-jones/' },
+            { case_name: 'Smith v. Jones, Inc.', absolute_url: '/opinion/222/smith-v-jones-inc/' },
+          ],
+        },
+      ],
+    });
+
+    const match = await provider.lookupCitation({ raw: '10 F.3d 20', caseName: 'Smith v. Jones' });
+
+    expect(match).not.toBeNull();
+    expect(match!.ambiguousMatch).toEqual({ candidateCount: 3 });
+    // Must be one of the name-matched candidates, never the unrelated first-in-response cluster.
+    expect(match!.caseName).not.toBe('Acme Corp. v. Widget Co.');
+    expect(match!.caseName).toBe('Smith v. Jones');
+    expect(match!.url).toBe('https://www.courtlistener.com/opinion/111/smith-v-jones/');
   });
 
   describe('rate-limit awareness (supportsRateLimitAwareness)', () => {
@@ -670,6 +753,81 @@ describe('CourtListenerProvider', () => {
 
       const { excerpt } = await provider.fetchOpinionExcerpt({ raw: EXAMPLE_CITATION }, [490]);
       expect(excerpt).toContain('Holding from HTML.');
+    });
+
+    // Regression test for 02-REVIEW.md CR-01: resolveClusterId (used exclusively by
+    // fetchOpinionExcerpt) used to take clusters[0] unconditionally, with no case-name
+    // disambiguation and no ambiguity signal at all. A caller using "Embed Cited Text" on an
+    // ambiguous citation could silently attach a different case's opinion text into the document
+    // under the citation the user actually wrote.
+    test('CR-01 regression: refuses to fetch/return opinion text when the locator resolves to an ambiguous match', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      const provider = new CourtListenerProvider();
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] });
+      await provider.authenticate({ apiToken: 'secret-token' });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            citation: '114 F.3d 1182',
+            status: 200,
+            clusters: [
+              { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+              { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+            ],
+          },
+        ],
+      });
+
+      // Neither cluster's case_name matches the citing document's own parsed case name, so
+      // case-name disambiguation cannot narrow this to a single confident match.
+      const result = await provider.fetchOpinionExcerpt(
+        { raw: '114 F.3d 1182', caseName: 'Unrelated Party v. Another Party' },
+        [1182]
+      );
+
+      expect(result).toEqual({ excerpt: null, ambiguousMatch: { candidateCount: 2 } });
+      // Only the citation-lookup call fires -- the opinions-by-cluster endpoint must never be hit
+      // once the locator is known to be ambiguous.
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('CR-01 regression: still resolves and returns the opinion excerpt when case name disambiguates a multi-cluster locator', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      const provider = new CourtListenerProvider();
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] });
+      await provider.authenticate({ apiToken: 'secret-token' });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            citation: '114 F.3d 1182',
+            status: 200,
+            clusters: [
+              { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+              { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+            ],
+          },
+        ],
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ results: [{ plain_text: '*1182 Holding for Smith v. Jones.' }] }),
+      });
+
+      const result = await provider.fetchOpinionExcerpt({ raw: '114 F.3d 1182', caseName: 'Smith v. Jones' }, [1182]);
+
+      expect(result.ambiguousMatch).toBeUndefined();
+      expect(result.excerpt).toContain('Holding for Smith v. Jones.');
     });
   });
 });

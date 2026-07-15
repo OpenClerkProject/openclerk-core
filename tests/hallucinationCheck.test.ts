@@ -181,6 +181,53 @@ describe("checkCitationsForHallucinations against the real Mata v. Avianca filin
     expect(results[0].verifiedVia).toBe("RightProvider");
   });
 
+  // Regression test for 02-REVIEW.md WR-01: nameMismatch/ambiguousMatch, once set by an earlier
+  // non-verifying provider, used to remain on the pushed result even when a later provider then
+  // verified the citation cleanly (verifiedVia set via break) -- a caller that checks
+  // result.nameMismatch before result.verifiedVia could flag a citation a later provider actually
+  // confirmed. Extends the "falls through" test above to assert the stale signal is cleared.
+  test("clears a stale nameMismatch from an earlier provider once a later provider verifies the citation", async () => {
+    const wrongProvider = mockLocatorOnlyProvider("WrongProvider", "Peterson v. Islamic Republic of Iran");
+    const rightProvider = mockProvider("RightProvider", ["Peterson v. Iran Air"]);
+
+    const results = await checkCitationsForHallucinations(
+      ["Peterson v. Iran Air, 905 F. Supp. 2d 121 (D.D.C. 2012)"],
+      [wrongProvider, rightProvider]
+    );
+
+    expect(results[0].verifiedVia).toBe("RightProvider");
+    expect(results[0].nameMismatch).toBeUndefined();
+  });
+
+  // Same WR-01 regression, for the ambiguousMatch signal instead of nameMismatch: an earlier
+  // provider reporting an ambiguous locator match must not leave ambiguousMatch set on the result
+  // once a later provider verifies the citation cleanly.
+  test("clears a stale ambiguousMatch from an earlier provider once a later provider verifies the citation", async () => {
+    const ambiguousProvider: CitationProvider = {
+      id: "ambiguous-provider",
+      name: "AmbiguousProvider",
+      description: "test double",
+      requiresAuth: false,
+      credentialFields: [],
+      isAuthenticated: () => true,
+      authenticate: async () => undefined,
+      signOut: () => undefined,
+      lookupCitation: async () => ({
+        url: "https://example.test/ambiguous-case",
+        ambiguousMatch: { candidateCount: 2 },
+      }),
+    };
+    const rightProvider = mockProvider("RightProvider", ["Peterson v. Iran Air"]);
+
+    const results = await checkCitationsForHallucinations(
+      ["Peterson v. Iran Air, 905 F. Supp. 2d 121 (D.D.C. 2012)"],
+      [ambiguousProvider, rightProvider]
+    );
+
+    expect(results[0].verifiedVia).toBe("RightProvider");
+    expect(results[0].ambiguousMatch).toBeUndefined();
+  });
+
   test("does not flag a citation as a hallucination just because the only checked provider was rate-limited", async () => {
     const rateLimitedProvider: CitationProvider = {
       id: "rate-limited",

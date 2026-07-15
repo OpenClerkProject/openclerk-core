@@ -19,6 +19,14 @@ export interface HallucinationCheckResult {
    * locator resolves to a genuine, unrelated case.
    */
   nameMismatch?: { provider: string; foundCaseName: string };
+  /**
+   * Set when a provider's lookup resolved this citation's locator to more than one distinct
+   * candidate case that couldn't be narrowed by case name. A real locator exists, but the
+   * confidence signal differs from a clean single-candidate match -- the caller decides what
+   * "possible hallucination" means from an ambiguous result, exactly as documented for
+   * `nameMismatch` above.
+   */
+  ambiguousMatch?: { provider: string; candidateCount: number };
 }
 
 /**
@@ -52,6 +60,7 @@ export async function checkCitationsForHallucinations(
     const parsed = parseCaseCitation(raw) || { raw };
     let verifiedVia: string | null = null;
     let nameMismatch: { provider: string; foundCaseName: string } | undefined;
+    let ambiguousMatch: { provider: string; candidateCount: number } | undefined;
     const skippedProviders: string[] = [];
     const rateLimitedProviders: string[] = [];
 
@@ -62,6 +71,17 @@ export async function checkCitationsForHallucinations(
       }
       const match = await provider.lookupCitation(parsed);
       if (match) {
+        // Finding 4 (02-RESEARCH.md): an ambiguous provider result already means "we couldn't be
+        // sure which real case this is" regardless of what match.caseName happens to say, so this
+        // check runs BEFORE the case-name-mismatch check below and is a distinct third outcome --
+        // never counted as verifiedVia, never as nameMismatch. Purely additive if/continue, no new
+        // throw path, preserving FIX-02's never-throw contract.
+        if (match.ambiguousMatch) {
+          if (!ambiguousMatch) {
+            ambiguousMatch = { provider: provider.name, candidateCount: match.ambiguousMatch.candidateCount };
+          }
+          continue;
+        }
         if (!parsed.caseName || !match.caseName || caseNamesMatch(parsed.caseName, match.caseName)) {
           verifiedVia = provider.name;
           break;
@@ -76,7 +96,19 @@ export async function checkCitationsForHallucinations(
       }
     }
 
-    results.push({ raw, verifiedVia, skippedProviders, rateLimitedProviders, nameMismatch });
+    // WR-01 (02-REVIEW.md): nameMismatch/ambiguousMatch may have been set by an earlier provider
+    // that couldn't confirm the citation, before a later provider in the loop verified it cleanly
+    // (verifiedVia set via break). Clear the softer signals once verification succeeds so a caller
+    // that checks ambiguousMatch/nameMismatch before verifiedVia doesn't flag a citation a later
+    // provider actually confirmed.
+    results.push({
+      raw,
+      verifiedVia,
+      skippedProviders,
+      rateLimitedProviders,
+      nameMismatch: verifiedVia ? undefined : nameMismatch,
+      ambiguousMatch: verifiedVia ? undefined : ambiguousMatch,
+    });
   }
 
   return results;
