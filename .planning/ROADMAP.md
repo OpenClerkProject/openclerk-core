@@ -34,7 +34,8 @@ case-name/HTML safety and final cross-category traceability.
   2. `extractCaseCitations`/`parseCaseCitation` produce the identical `ParsedCitation` shape for reporter-spacing variants of the same citation (e.g. extra internal spaces, non-canonical punctuation spacing).
   3. Any parser bug found and fixed in `citationParser.ts` is benchmarked against adversarial input (per the existing ReDoS-safety pattern documented in `SECURITY_AUDIT.md`) with no new quadratic/catastrophic-backtracking regex introduced.
   4. Full `npm test` suite still passes after the fix, with no regression to citations whose non-canonical spacing was already handled correctly.
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 01-01-PLAN.md — Port CourtListener reporter-spacing tests (RED) and fix the un-normalized `reporter` field in `parseCaseCitation` via a benchmarked `normalizeReporterSpacing` helper (GREEN)
 
 ### Phase 2: Short-Form, Supra & Ambiguous-Match Resolution
 **Goal**: Short-form and `supra`-style citations resolve to the correct preceding full citation, and citations with ambiguous volume/reporter/page triples are flagged as multi-candidate rather than falsely resolved to a single match — with any `caseNamesMatch`/hallucination-check bugs these expose fixed.
@@ -68,6 +69,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Reporter-Spacing Normalization | 0/TBD | Not started | - |
+| 1. Reporter-Spacing Normalization | 0/1 | Planned | - |
 | 2. Short-Form, Supra & Ambiguous-Match Resolution | 0/TBD | Not started | - |
 | 3. Case-Name & HTML Safety, Full Traceability | 0/TBD | Not started | - |
