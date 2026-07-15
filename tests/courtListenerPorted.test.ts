@@ -482,18 +482,30 @@ describe('SHORT_FORM_REGEX permanent ReDoS benchmark (adversarial input, not Cou
 // CourtListener asserts these case names survive Django's HTML-attribute escaping and
 // BeautifulSoup's attribute-decoding round trip unchanged. This library has no HTML-rendering
 // pipeline of its own (per 03-CONTEXT.md's scope decision), so the portable equivalent is:
-// escapeHtml produces the correct entity-escaped form, and stripHtmlHyperlinks decodes it back
-// losslessly -- the same "escape then decode" round trip CourtListener's test exercises via a
-// different mechanism (BeautifulSoup attribute parsing vs. this library's own decode helper).
+// escapeHtml produces the correct entity-escaped form, and stripHtmlHyperlinks decodes it back --
+// the same "escape then decode" round trip CourtListener's test exercises via a different
+// mechanism (BeautifulSoup attribute parsing vs. this library's own decode helper). NOTE
+// (03-REVIEW.md WR-02): stripHtmlHyperlinks unconditionally finishes with normalizeText
+// (src/utils.ts), which collapses any run of whitespace to a single space and trims leading/
+// trailing whitespace -- so this round trip is character-preserving but NOT whitespace-preserving.
+// The first three fixtures below happen to have no whitespace irregularities, so the round trip
+// looks like raw equality for them; the fourth fixture makes the whitespace-normalization caveat
+// explicit rather than leaving it implied by three fixtures that don't exercise it.
 describe('CourtListener ported tests: case-name HTML-escaping safety (TEST-05)', () => {
   test.each([
-    ["Farmers ' High Line Canal & Reservoir Co. v. New Hampshire Real Estate Co."],
-    ["Barmore v '"],
-    ['Shamokin, Pa.", (Leaflet in Case) Misnamed? \',' ],
-  ])('escapeHtml escapes and round-trips case name %j losslessly through stripHtmlHyperlinks', (caseName) => {
+    ["Farmers ' High Line Canal & Reservoir Co. v. New Hampshire Real Estate Co.", "Farmers ' High Line Canal & Reservoir Co. v. New Hampshire Real Estate Co."],
+    ["Barmore v '", "Barmore v '"],
+    ['Shamokin, Pa.", (Leaflet in Case) Misnamed? \',' , 'Shamokin, Pa.", (Leaflet in Case) Misnamed? \','],
+    // Real party names extracted from OCR'd/PDF-sourced court documents commonly contain
+    // irregular whitespace (double interior spaces, leading/trailing whitespace) -- exactly the
+    // "unsafe case names" class this describe block is porting from CourtListener. This fixture
+    // confirms the round trip still preserves every character, but normalizes the whitespace
+    // layout per stripHtmlHyperlinks' normalizeText pass, rather than reproducing the raw input.
+    ['  Smith   v.  Jones  ', 'Smith v. Jones'],
+  ])('escapeHtml escapes and round-trips case name %j through stripHtmlHyperlinks (character-preserving, subject to whitespace normalization)', (caseName, expectedRoundTrip) => {
     const escaped = escapeHtml(caseName);
     expect(escaped).not.toContain('<');
-    expect(stripHtmlHyperlinks(escaped)).toBe(caseName);
+    expect(stripHtmlHyperlinks(escaped)).toBe(expectedRoundTrip);
   });
 
   // Source: cl/citations/tests.py, class CitationTextTest, method
