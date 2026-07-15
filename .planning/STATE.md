@@ -84,6 +84,12 @@ None yet.
 - `caseNamesMatch`/`normalizeCaseNameParty` (Phase 2) is a documented fragile area with two prior real bypasses fixed (empty-string substring bypass, short-fragment substring bypass) — new fixes need adversarial regression tests, not just fixture-based ones.
 - `hallucinationCheck.ts` fails open (reports "verified") when either parsed citation or provider match lacks a case name — a deliberate documented design choice to keep in mind when Phase 2's ambiguous-match tests are ported.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260715-ki4 | Add a way to disable normalizeReporterSpacing so host integrations can opt out if a problem is found in production | 2026-07-15 | a73b37c | [260715-ki4-add-a-way-to-disable-normalizereportersp](./quick/260715-ki4-add-a-way-to-disable-normalizereportersp/) |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -97,3 +103,5 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-07-15T17:32:23.761Z
 Stopped at: Completed 01-01-PLAN.md
 Resume file: None
+
+Last activity: 2026-07-15 - Completed quick task 260715-ki4: Add a way to disable normalizeReporterSpacing so host integrations can opt out if a problem is found in production
