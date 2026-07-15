@@ -18,6 +18,11 @@ export {
   resetHttpClient,
 } from "./http";
 export {
+  setReporterSpacingNormalizationEnabled,
+  isReporterSpacingNormalizationEnabled,
+  resetReporterSpacingNormalization,
+} from "./utils";
+export {
   EnterpriseCitationProvider,
   trimTrailingSlash,
   fetchClientCredentialsToken,
