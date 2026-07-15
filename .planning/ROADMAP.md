@@ -74,7 +74,9 @@ case-name/HTML safety and final cross-category traceability.
   3. Full `npm test` suite passes with the new file included, and no new runtime dependency was introduced by any fix across the milestone.
   4. Existing hyperlink/escaping tests (`tests/hyperlinks.test.ts`) continue to pass, confirming the newly-ported cases don't reveal a regression in already-fixed escaping logic.
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+- [ ] 03-01-PLAN.md — Port CourtListener case-name/HTML-escaping safety tests (TEST-05) against the four in-scope functions, add the missing `stripHtmlHyperlinks` double-unescape regression test, and perform the whole-file TEST-06 traceability closeout (confirm-and-port: RESEARCH found no bug)
 
 ## Progress
 
@@ -85,4 +87,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reporter-Spacing Normalization | 1/1 | Complete    | 2026-07-15 |
 | 2. Short-Form, Supra & Ambiguous-Match Resolution | 2/2 | Complete    | 2026-07-15 |
-| 3. Case-Name & HTML Safety, Full Traceability | 0/TBD | Not started | - |
+| 3. Case-Name & HTML Safety, Full Traceability | 0/1 | Not started | - |
