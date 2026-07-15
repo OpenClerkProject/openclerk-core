@@ -266,3 +266,56 @@ describe('normalizeReporterSpacing toggle: host opt-out for production issues', 
     expect(reenabled!.reporter).toBe('U.S.');
   });
 });
+
+// Not a CourtListener-ported test -- a permanent adversarial-input benchmark, added per
+// CLAUDE.md's regex-safety constraint and 02-RESEARCH.md's Pitfall 1: the ",?" added before
+// "\s+at\s+" in SHORT_FORM_REGEX/SHORT_FORM_CITATION_REGEX/parseCaseCitation's short-form
+// fallback (FIX #1) is a "small, obviously-safe" edit to a pattern with a documented ReDoS
+// history (SECURITY_AUDIT.md findings 1 and 4: the {1,40}? bound on SHORT_FORM_REGEX's reporter
+// segment exists precisely because an earlier unbounded version was quadratic -- confirmed ~8s at
+// ~109K chars, ~25s at ~189K chars, before that bound was added). This guards against a future
+// edit to the tail of that pattern reopening backtracking. Re-verifies research's first-pass
+// benchmark (four adversarial shapes at ~1.5-1.6M chars, all ≤1.3s) as a fail-fast CI artifact
+// rather than a one-off manual check.
+describe('SHORT_FORM_REGEX permanent ReDoS benchmark (adversarial input, not CourtListener-ported)', () => {
+  const WALL_CLOCK_CEILING_MS = 5000;
+
+  test('digit-heavy bait: a long run of bare numbers with no reporter/"at" match completes fast', () => {
+    // No case name, no reporter letters, no "at" -- SHORT_FORM_REGEX's optional name-part and
+    // digit-anchored NUMBER group can attempt a match at nearly every digit run in the text.
+    const text = '12345 67890 24680 13579 '.repeat(60000); // ~1.44M chars
+    const start = Date.now();
+    extractCitationTokens(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+  });
+
+  test('capitalized-token runs: long prose-shaped text with no case-name/"at" match completes fast', () => {
+    // Capitalized tokens can anchor CASE_NAME's optional leading group repeatedly without ever
+    // reaching a valid "at"-introduced pincite, exercising the lazy reporter-segment scan broadly.
+    const text = 'Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa '.repeat(30000); // ~1.7M chars
+    const start = Date.now();
+    extractCitationTokens(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+  });
+
+  test('repeated comma-anchored "at" bait with no closing match completes fast', () => {
+    // The exact shape FIX #1 introduces risk for: many "410 U.S., " comma-before-"at" anchors,
+    // each one immediately followed by more digits (never a real pincite "at"), forcing the
+    // now-optional comma to be attempted-and-abandoned at every occurrence.
+    const text = '410 U.S., 410 U.S., 410 U.S., 410 U.S., '.repeat(45000); // ~1.6M chars
+    const start = Date.now();
+    extractCitationTokens(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+  });
+
+  test('realistic mixed text with many real comma-before-"at" short forms completes fast', () => {
+    // A realistic worst case for a correctness-preserving benchmark: thousands of genuine
+    // comma-before-"at" short-form matches (the exact FIX #1 shape) embedded in prose, confirming
+    // the fix doesn't just avoid worst-case blowups but stays fast on heavy legitimate matching too.
+    const text = 'As the Court noted, 410 U.S., at 165, further discussion followed. '.repeat(20000); // ~1.4M chars
+    const start = Date.now();
+    const tokens = extractCitationTokens(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+    expect(tokens.some((t) => t.type === 'short' && t.raw.includes('410 U.S., at 165'))).toBe(true);
+  });
+});
