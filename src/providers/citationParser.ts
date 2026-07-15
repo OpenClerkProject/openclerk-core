@@ -376,11 +376,13 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
 
   if (match) {
     const [, caseName, volume, reporter, page, pincite, parenthetical] = match;
+    const reporterTrimmed = reporter.trim();
     const parsed: ParsedCitation = {
       raw,
       caseName: caseName?.trim(),
       volume: volume?.trim(),
-      reporter: normalizeReporterSpacing(reporter.trim()),
+      reporter: normalizeReporterSpacing(reporterTrimmed),
+      reporterRaw: reporterTrimmed,
       page: page?.trim(),
     };
     if (pincite) {
@@ -411,11 +413,13 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
 
   if (shortMatch) {
     const [, caseName, volume, reporter, pincite] = shortMatch;
+    const reporterTrimmed = reporter.trim();
     return {
       raw,
       caseName: caseName?.trim(),
       volume: volume?.trim(),
-      reporter: normalizeReporterSpacing(reporter.trim()),
+      reporter: normalizeReporterSpacing(reporterTrimmed),
+      reporterRaw: reporterTrimmed,
       pincite: pincite?.trim(),
       isShortForm: true,
     };

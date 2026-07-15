@@ -13,6 +13,18 @@ export interface ParsedCitation {
   caseName?: string;
   volume?: string;
   reporter?: string;
+  /**
+   * The reporter abbreviation exactly as it appeared in the source citation, before
+   * `normalizeReporterSpacing` (src/utils.ts) collapses spacing in single-capital-letter tokens
+   * (e.g. "U. S." -> "U.S."). `reporter` is normalized for citation *matching/lookup* purposes
+   * (so "U. S." and "U.S." resolve to the same reporter); `reporterRaw` preserves the as-written
+   * text so Bluebook *formatting* checks (see checkReporterAbbreviation in
+   * src/bluebook/reporterRules.ts) can still see -- and flag -- a genuine Rule 6.1 spacing mistake
+   * that the matching-oriented normalization would otherwise silently hide. Use this field (not
+   * `reporter`) whenever checking Bluebook formatting rules. Unset only when `reporter` itself is
+   * unset (no reporter was parsed at all).
+   */
+  reporterRaw?: string;
   page?: string;
   /** Pinpoint page/range, e.g. "496" or "705-06" in "..., 490, 496 (1980)". */
   pincite?: string;

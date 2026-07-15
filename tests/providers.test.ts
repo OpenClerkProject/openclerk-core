@@ -14,6 +14,7 @@ describe('parseCaseCitation', () => {
       caseName: 'Norfolk & W. Ry. Co. v. Liepelt',
       volume: '444',
       reporter: 'U.S.',
+      reporterRaw: 'U.S.',
       page: '490',
       court: 'U.S.Ill.',
       year: '1980',
@@ -33,6 +34,7 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
       caseName: 'Brown v. Board of Education',
       volume: '347',
       reporter: 'U.S.',
+      reporterRaw: 'U.S.',
       page: '483',
       year: '1954',
     });
@@ -127,6 +129,7 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
       caseName: 'Darlingh v. Maddaleni',
       volume: '142',
       reporter: 'F.4th',
+      reporterRaw: 'F.4th',
       page: '558',
       pincite: '567 n.1',
       court: '7th Cir.',
@@ -161,6 +164,7 @@ describe('parseCaseCitation: short-form citations (Rule 10.9)', () => {
       caseName: 'Rundo',
       volume: '990',
       reporter: 'F.3d',
+      reporterRaw: 'F.3d',
       pincite: '712',
       isShortForm: true,
     });

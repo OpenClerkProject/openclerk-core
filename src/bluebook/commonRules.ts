@@ -50,6 +50,12 @@ export function checkCommonCaseCitationRules(citation: ParsedCitation): Bluebook
       });
     }
 
+    // Intentionally checks the normalized `reporter` (not `reporterRaw`) here: this is asking
+    // "is this citation semantically to the U.S. Reports" for matching purposes (a spacing variant
+    // like "22 U. S. 33" is still a U.S. Reports citation and must not be forced to supply a court
+    // abbreviation just because of how it was spaced), not a Rule 6.1 formatting check -- that
+    // formatting check lives in checkReporterAbbreviation (reporterRules.ts), which does use
+    // `reporterRaw` for exactly the opposite reason.
     if (citation.reporter && citation.reporter !== "U.S." && !citation.court) {
       issues.push({
         ruleId: "court-abbreviation-required",

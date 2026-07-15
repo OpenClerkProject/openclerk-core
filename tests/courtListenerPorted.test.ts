@@ -13,9 +13,13 @@ describe('CourtListener ported tests: reporter-spacing normalization', () => {
     const canonical = parseCaseCitation('Marbury v. Madison, 22 U.S. 33 (1803)');
     expect(spaced).not.toBeNull();
     expect(canonical).not.toBeNull();
-    // `raw` legitimately differs (it mirrors exact source text) -- compare everything else.
-    expect({ ...spaced, raw: undefined }).toEqual({ ...canonical, raw: undefined });
+    // `raw` and `reporterRaw` legitimately differ (they mirror exact source text, and the spaced
+    // variant is a documented reporters-db "corrections"-table entry -- see 01-REVIEW.md CR-02) --
+    // compare everything else, which must be identical since `reporter` is normalized for matching.
+    expect({ ...spaced, raw: undefined, reporterRaw: undefined }).toEqual({ ...canonical, raw: undefined, reporterRaw: undefined });
     expect(spaced!.reporter).toBe('U.S.');
+    expect(spaced!.reporterRaw).toBe('U. S.');
+    expect(canonical!.reporterRaw).toBe('U.S.');
   });
 
   // Source: cl/citations/tests.py, class CitationTextTest, method
@@ -30,8 +34,10 @@ describe('CourtListener ported tests: reporter-spacing normalization', () => {
     const canonical = parseCaseCitation('Marbury, 22 U.S. at 33');
     expect(spaced).not.toBeNull();
     expect(canonical).not.toBeNull();
-    expect({ ...spaced, raw: undefined }).toEqual({ ...canonical, raw: undefined });
+    expect({ ...spaced, raw: undefined, reporterRaw: undefined }).toEqual({ ...canonical, raw: undefined, reporterRaw: undefined });
     expect(spaced!.reporter).toBe('U.S.');
+    expect(spaced!.reporterRaw).toBe('U. S.');
+    expect(canonical!.reporterRaw).toBe('U.S.');
     expect(spaced!.isShortForm).toBe(true);
   });
 
@@ -100,17 +106,35 @@ describe('CourtListener ported tests: reporter-spacing normalization', () => {
     expect(normalizeReporterSpacing(reporterForm)).toBe(reporterForm);
   });
 
-  // Regression test for 01-REVIEW.md CR-02: reporters-db's "corrections" table records these
-  // exact strings as KNOWN non-standard forms of a different valid reporter (e.g. "F. 2d" is a
-  // documented mis-spacing of "F.2d"). Verified end-to-end before this fix: normalizing "F. 2d"
-  // to "F.2d" before checkReporterAbbreviation (src/bluebook/reporterRules.ts) ever sees it made
-  // the mistake invisible to Rule 6.1 checking. normalizeReporterSpacing must leave these forms
-  // untouched so the Bluebook checker still gets a chance to flag them (see the corresponding
-  // checkCommonCaseCitationRules regression tests in tests/bluebook.test.ts).
-  test.each(['F. 2d', 'C. C. A.', 'N. E. 2d'])(
-    'documented non-standard form "%s" is a no-op for normalizeReporterSpacing',
-    (reporterForm) => {
-      expect(normalizeReporterSpacing(reporterForm)).toBe(reporterForm);
-    }
-  );
+  // Follow-up regression test for 01-REVIEW.md CR-02, updated for the reporterRaw split (see
+  // 01-REVIEW-FIX.md): reporters-db's "corrections" table records these exact strings as KNOWN
+  // non-standard forms of a different valid reporter (e.g. "F. 2d" is a documented mis-spacing of
+  // "F.2d"). normalizeReporterSpacing is NO LONGER required to leave these forms untouched --
+  // that was a workaround for the era when `ParsedCitation.reporter` was the only reporter field
+  // and checkReporterAbbreviation read from it directly. Now that parseCaseCitation populates a
+  // separate `reporterRaw` field with the untouched, as-written text (which
+  // checkReporterAbbreviation reads instead -- see tests/bluebook.test.ts), normalizeReporterSpacing
+  // is free to collapse these for citation-matching purposes just like any other single-capital-
+  // letter form; the Bluebook checker still sees the real text via reporterRaw regardless.
+  test.each([
+    ['F. 2d', 'F.2d'],
+    ['C. C. A.', 'C.C.A.'],
+    ['N. E. 2d', 'N.E.2d'],
+  ])('documented non-standard form "%s" is now normalized to "%s" for matching purposes', (reporterForm, expected) => {
+    expect(normalizeReporterSpacing(reporterForm)).toBe(expected);
+  });
+
+  // Confirms parseCaseCitation still preserves the as-written text in reporterRaw even though
+  // `reporter` is now normalized, so the Bluebook checker can still flag the mistake (see
+  // tests/bluebook.test.ts for the end-to-end checkCommonCaseCitationRules assertions).
+  test.each([
+    ['F. 2d', 'F.2d'],
+    ['C. C. A.', 'C.C.A.'],
+    ['N. E. 2d', 'N.E.2d'],
+  ])('parseCaseCitation normalizes "%s" to "%s" in reporter but preserves it verbatim in reporterRaw', (reporterForm, expected) => {
+    const parsed = parseCaseCitation(`Smith v. Jones, 123 ${reporterForm} 456 (2010)`);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.reporter).toBe(expected);
+    expect(parsed!.reporterRaw).toBe(reporterForm);
+  });
 });

@@ -85,7 +85,13 @@ const spacingLookup = buildReporterSpacingLookup(validForms);
  * editions the way case-name/statutory abbreviations do, so this applies to every edition.
  */
 export function checkReporterAbbreviation(citation: ParsedCitation): BluebookIssue[] {
-  const reporter = citation.reporter;
+  // Bluebook formatting checks must see the reporter exactly as written, not the
+  // matching-normalized form -- `reporter` collapses spacing in single-capital-letter tokens
+  // (e.g. "F. 2d" -> "F.2d") for citation-matching purposes, which would silently hide a genuine
+  // Rule 6.1 spacing mistake from this check (see 01-REVIEW.md CR-02). Falls back to `reporter`
+  // for defensive compatibility with any ParsedCitation constructed without `reporterRaw` set
+  // (e.g. hand-built test fixtures or a future parser/provider that doesn't populate it).
+  const reporter = citation.reporterRaw ?? citation.reporter;
   if (!reporter) {
     return [];
   }

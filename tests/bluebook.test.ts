@@ -243,6 +243,46 @@ describe('reporter abbreviation checks (vendored reporters-db Table T1 data)', (
       expect(flagged?.message).toContain(correctForm);
     }
   );
+
+  // Follow-up to 01-REVIEW.md CR-02 (see 01-REVIEW-FIX.md addendum): the three forms above were
+  // the only ones the original CR-02 fix protected via a hand-curated RESERVED_REPORTER_SPACING_FORMS
+  // allowlist in src/utils.ts. That allowlist has since been removed for this category -- the fix
+  // now works generally, via ParsedCitation.reporterRaw (populated in citationParser.ts, read by
+  // checkReporterAbbreviation in reporterRules.ts) -- so any of the ~138 reporters-db
+  // "corrections"-table entries this normalizer's positional heuristic would collapse should now be
+  // correctly flagged, not just the 3 originally named in the review. These four are additional,
+  // previously-unprotected corrections-table entries (verified against
+  // src/bluebook/generated/reporterAbbreviations.generated.ts) chosen to prove the general fix,
+  // not just the special-cased ones above.
+  test.each([
+    ['F. 3d', 'F.3d'],
+    ['N. W. 2d', 'N.W.2d'],
+    ['S. E. 2d', 'S.E.2d'],
+    ['S. W. 2d', 'S.W.2d'],
+  ])(
+    'reporter-nonstandard-form fires for the previously-unprotected corrections-table entry "%s"',
+    (reporterForm, correctForm) => {
+      const issues = checkCommonCaseCitationRules(
+        parseOrThrow(`Smith v. Jones, 123 ${reporterForm} 456 (2d Cir. 2010)`)
+      );
+      const flagged = issues.find((i) => i.ruleId === 'reporter-nonstandard-form');
+      expect(flagged).toBeDefined();
+      expect(flagged?.message).toContain(correctForm);
+    }
+  );
+
+  // The reporterRaw split must not regress the citation-matching behavior TEST-01 and CR-01
+  // depend on: `reporter` is still normalized for matching, even for these newly-unprotected forms.
+  test.each([
+    ['F. 3d', 'F.3d'],
+    ['N. W. 2d', 'N.W.2d'],
+    ['S. E. 2d', 'S.E.2d'],
+    ['S. W. 2d', 'S.W.2d'],
+  ])('"%s" still normalizes to "%s" in the matching-oriented reporter field', (reporterForm, expected) => {
+    const parsed = parseOrThrow(`Smith v. Jones, 123 ${reporterForm} 456 (2d Cir. 2010)`);
+    expect(parsed.reporter).toBe(expected);
+    expect(parsed.reporterRaw).toBe(reporterForm);
+  });
 });
 
 describe('page-range digit-dropping checks (Bluebook Rule 3.2)', () => {

@@ -18,22 +18,38 @@ export function normalizeText(value: string): string {
 // letter reporters are, per Free Law Project's reporters-db Table T1 data (vendored at
 // src/bluebook/generated/reporterAbbreviations.generated.ts and consumed by
 // src/bluebook/reporterRules.ts's checkReporterAbbreviation), an exception to the general
-// close-up rule (e.g. "A.L.R. 2d" legitimately keeps its space before the series digit) or a
-// documented non-standard spelling that Rule 6.1 checking needs to see verbatim in order to flag
-// it (e.g. "F. 2d", "C. C. A."). Found in code review (01-REVIEW.md CR-01/CR-02): applying the
-// regex unconditionally either corrupts the former into a false-looking error, or silently
-// "fixes" the latter before checkReporterAbbreviation ever runs, hiding a real Rule 6.1 violation.
-// RESERVED_REPORTER_SPACING_FORMS is a small, hand-verified exception list (checked against the
-// generated Table T1 data at review time) carving out both failure classes -- it is intentionally
-// NOT a general reporters-db-driven fix: src/utils.ts is a dependency-free leaf module and must
-// not import from src/bluebook/ (see CLAUDE.md's one-way providers -> bluebook non-dependency), so
-// a fully data-driven version of this guard would require moving/duplicating the generated table
-// into a shared leaf location -- out of scope here and tracked as a follow-up rather than
-// silently left unhandled. This list only covers the specific forms verified in 01-REVIEW.md; it
-// is not exhaustive of every reporters-db entry this heuristic could still mis-handle.
+// close-up rule (e.g. "A.L.R. 2d" legitimately keeps its space before the series digit). Found in
+// code review (01-REVIEW.md CR-01): applying the regex unconditionally corrupts these forms into
+// a false-looking error. RESERVED_REPORTER_SPACING_FORMS is a small, hand-verified exception list
+// (checked against the generated Table T1 data at review time) carving out that failure class --
+// it is intentionally NOT a general reporters-db-driven fix: src/utils.ts is a dependency-free
+// leaf module and must not import from src/bluebook/ (see CLAUDE.md's one-way providers ->
+// bluebook non-dependency), so a fully data-driven version of this guard would require moving/
+// duplicating the generated table into a shared leaf location -- out of scope here. This list only
+// covers the specific forms verified in 01-REVIEW.md; it is not exhaustive of every reporters-db
+// Table T1 entry with an intentional non-close-up space.
+//
+// NOTE on 01-REVIEW.md CR-02 (documented reporters-db "corrections"-table typos like "F. 2d",
+// "C. C. A.", "N. E. 2d", and ~135 others -- including "U. S." itself): those forms used to also
+// need an entry here, because `ParsedCitation.reporter` was the *only* reporter field, and
+// checkReporterAbbreviation (src/bluebook/reporterRules.ts) read straight from it -- so collapsing
+// "F. 2d" to "F.2d" here made the mistake invisible to that checker. That conflicted with CR-01's
+// own list, since "U. S." is structurally the same kind of entry ("U. S." -> "U.S." is exactly what
+// the existing collapsing behavior is supposed to do for citation *matching*). This was resolved by
+// splitting `ParsedCitation` into two reporter fields (see reporterRaw in src/providers/types.ts):
+// `reporter` stays normalized here for matching/lookup, while a separate `reporterRaw` field
+// (populated by src/providers/citationParser.ts alongside `reporter`) carries the untouched,
+// as-written text through to checkReporterAbbreviation, which now reads `reporterRaw` instead.
+// That means this normalizer no longer needs to protect corrections-table entries from itself --
+// the checker sees the real text regardless of what this function does to `reporter` -- so the
+// CR-02 entries that used to live in this set were removed once reporterRaw shipped. The CR-01
+// entries below remain: those are a genuinely separate concern (protecting citation-MATCHING
+// output from being corrupted into an invalid-looking string), not something reporterRaw
+// addresses.
 const RESERVED_REPORTER_SPACING_FORMS = new Set<string>([
   // CR-01: valid Table T1 forms that must round-trip unchanged (the space before the series
-  // digit/parenthetical is intentional, not a Rule 6.1 mistake).
+  // digit/parenthetical is intentional, not a Rule 6.1 mistake) -- this protects the
+  // matching-oriented `reporter` field itself, which reporterRaw does not address.
   "A.L.R. 2d",
   "A.L.R. 3d",
   "A.L.R. 4th",
@@ -51,12 +67,6 @@ const RESERVED_REPORTER_SPACING_FORMS = new Set<string>([
   "U. S. Law J.",
   "U.S.P.Q. 2d (BNA)",
   "Wash. C. C.",
-  // CR-02: documented reporters-db "corrections" typos that must reach
-  // checkReporterAbbreviation unmodified so its Rule 6.1 nonstandard-form check isn't silently
-  // defeated by this normalizer pre-correcting the mistake away.
-  "F. 2d",
-  "C. C. A.",
-  "N. E. 2d",
 ]);
 
 export function normalizeReporterSpacing(reporter: string): string {
