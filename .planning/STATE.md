@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 02
 current_phase_name: short-form-supra-ambiguous-match-resolution
-status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-15T20:43:09.350Z"
+status: verifying
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-07-15T20:56:25.422Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 02 (short-form-supra-ambiguous-match-resolution) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-15 — Phase 02 execution started
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [███████░░░] 67%
 |------|----------|-------|-------|
 | Phase 01 P01 | 9min | 2 tasks | 4 files |
 | Phase 02 P01 | 13min | 3 tasks | 2 files |
+| Phase 02 P02 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase ?]: caseNameMatchesToken rewritten to delegate to normalizeCaseNameParty/partyWordsContain instead of a fourth independent case-name comparator
 - [Phase ?]: CitationCluster stores volume/reporter at creation time (same parseCaseCitation call producing caseName) to avoid a second regex pass per clustering decision
 - [Phase ?]: Kept SHORT_FORM_REGEX's {1,40}? reporter bound unchanged while adding the optional comma before at -- documented ReDoS-safety fix must not be widened
+- [Phase ?]: Adopted 02-RESEARCH.md's refined disambiguation design (caseNamesMatch-first) over CONTEXT.md's simpler always-flag default, reducing false ambiguous-match noise for citations resolvable by name
 
 ### Pending Todos
 
@@ -106,6 +108,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T20:43:09.247Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-07-15T20:56:25.370Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
