@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Reporter-Spacing Normalization
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-07-15T16:50:36.854Z"
+current_phase: 01
+current_phase_name: reporter-spacing-normalization
+status: verifying
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-07-15T17:32:23.802Z"
 last_activity: 2026-07-15
-last_activity_desc: ROADMAP.md and STATE.md created; requirements mapped to phases
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Citations extracted and matched by this library must be correct and never silently wrong — a false "verified" or a missed hallucination undermines the entire point of the hallucination-check feature.
-**Current focus:** Phase 1 - Reporter-Spacing Normalization
+**Current focus:** Phase 01 — reporter-spacing-normalization
 
 ## Current Position
 
-Phase: 1 of 3 (Reporter-Spacing Normalization)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-07-15 — ROADMAP.md and STATE.md created; requirements mapped to phases
+Phase: 01 (reporter-spacing-normalization) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-07-15 — Phase 01 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 9min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -66,6 +71,8 @@ Recent decisions affecting current work:
 - Roadmap: New dedicated test file (`tests/courtListenerPorted.test.ts`) rather than extending existing test files, for source traceability
 - Roadmap: Scope includes fixing bugs the ported tests expose, not just adding tests
 - Roadmap: FIX-03 (caseNamesMatch bug fix spanning TEST-02/03/04) grouped into Phase 2 alongside its exposing test categories rather than split across phases, since short-form/supra/ambiguous-match resolution all share the same fragile `caseNamesMatch` gate
+- [Phase ?]: Normalize reporter field at the source in parseCaseCitation (both branches), not only at comparison time, per RESEARCH.md analysis -- also fixes a latent bluebook/commonRules.ts exact-match bug
+- [Phase ?]: Short-form test fixture corrected from RESEARCH.md draft bare '1 U. S. at 2' to case-name-prefixed 'Marbury, 22 U. S. at 33' -- the bare form fails for the wrong reason
 
 ### Pending Todos
 
@@ -87,6 +94,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:50:36.839Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-reporter-spacing-normalization/01-CONTEXT.md
+Last session: 2026-07-15T17:32:23.761Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
