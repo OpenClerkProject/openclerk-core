@@ -69,7 +69,36 @@ const RESERVED_REPORTER_SPACING_FORMS = new Set<string>([
   "Wash. C. C.",
 ]);
 
+let reporterSpacingNormalizationEnabled = true;
+
+/**
+ * Lets a host integration disable Rule 6.1 reporter-spacing normalization at runtime, without
+ * waiting on a library update. normalizeReporterSpacing's positional heuristic is necessarily
+ * context-free (it cannot see reporters-db Table T1 data -- see the RESERVED_REPORTER_SPACING_FORMS
+ * comment above) and already required a hand-verified exception list to avoid corrupting some
+ * legitimately-spaced forms. If a host discovers a real-world reporter form that heuristic still
+ * mis-handles, this is the immediate kill switch: call setReporterSpacingNormalizationEnabled(false)
+ * to make normalizeReporterSpacing (and both parseCaseCitation call sites, which call it directly)
+ * return the reporter string unchanged. Defaults to enabled so nothing changes unless a host
+ * explicitly opts out.
+ */
+export function setReporterSpacingNormalizationEnabled(enabled: boolean): void {
+  reporterSpacingNormalizationEnabled = enabled;
+}
+
+export function isReporterSpacingNormalizationEnabled(): boolean {
+  return reporterSpacingNormalizationEnabled;
+}
+
+/** Restores the default (enabled) reporter-spacing normalization behavior. Mainly useful between test cases. */
+export function resetReporterSpacingNormalization(): void {
+  reporterSpacingNormalizationEnabled = true;
+}
+
 export function normalizeReporterSpacing(reporter: string): string {
+  if (!reporterSpacingNormalizationEnabled) {
+    return reporter;
+  }
   if (RESERVED_REPORTER_SPACING_FORMS.has(reporter)) {
     return reporter;
   }
