@@ -388,7 +388,8 @@ describe('caseNameMatchesToken / clusterCitationTokens: short-fragment substring
 // New opt-out feature (not a CourtListener-ported test): added so a host integration can disable
 // normalizeReporterSpacing at runtime if a problem is found in production, without waiting on a
 // library update -- see the rationale comment above setReporterSpacingNormalizationEnabled in
-// src/utils.ts.
+// src/utils.ts. Originating work item: quick task 260715-ki4 (see STATE.md's Quick Tasks
+// Completed table, commit a73b37c).
 describe('normalizeReporterSpacing toggle: host opt-out for production issues', () => {
   afterEach(() => {
     resetReporterSpacingNormalization();
