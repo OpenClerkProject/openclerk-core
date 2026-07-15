@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
-current_phase_name: Short-Form, Supra & Ambiguous-Match Resolution
-status: planning
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-15T19:37:21.116Z"
+current_phase: 02
+current_phase_name: short-form-supra-ambiguous-match-resolution
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-07-15T20:43:09.350Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  total_plans: 3
+  completed_plans: 2
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Citations extracted and matched by this library must be correct and never silently wrong — a false "verified" or a missed hallucination undermines the entire point of the hallucination-check feature.
-**Current focus:** Phase 2 — Short-Form, Supra & Ambiguous-Match Resolution
+**Current focus:** Phase 02 — short-form-supra-ambiguous-match-resolution
 
 ## Current Position
 
-Phase: 2 — Short-Form, Supra & Ambiguous-Match Resolution
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-15 — Phase 1 complete, transitioned to Phase 2
+Phase: 02 (short-form-supra-ambiguous-match-resolution) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-07-15 — Phase 02 execution started
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [██████████] 100%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 9min | 2 tasks | 4 files |
+| Phase 02 P01 | 13min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,9 @@ Recent decisions affecting current work:
 - Roadmap: FIX-03 (caseNamesMatch bug fix spanning TEST-02/03/04) grouped into Phase 2 alongside its exposing test categories rather than split across phases, since short-form/supra/ambiguous-match resolution all share the same fragile `caseNamesMatch` gate
 - [Phase ?]: Normalize reporter field at the source in parseCaseCitation (both branches), not only at comparison time, per RESEARCH.md analysis -- also fixes a latent bluebook/commonRules.ts exact-match bug
 - [Phase ?]: Short-form test fixture corrected from RESEARCH.md draft bare '1 U. S. at 2' to case-name-prefixed 'Marbury, 22 U. S. at 33' -- the bare form fails for the wrong reason
+- [Phase ?]: caseNameMatchesToken rewritten to delegate to normalizeCaseNameParty/partyWordsContain instead of a fourth independent case-name comparator
+- [Phase ?]: CitationCluster stores volume/reporter at creation time (same parseCaseCitation call producing caseName) to avoid a second regex pass per clustering decision
+- [Phase ?]: Kept SHORT_FORM_REGEX's {1,40}? reporter bound unchanged while adding the optional comma before at -- documented ReDoS-safety fix must not be widened
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T19:37:21.041Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-short-form-supra-ambiguous-match-resolution/02-CONTEXT.md
+Last session: 2026-07-15T20:43:09.247Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None

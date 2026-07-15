@@ -56,9 +56,9 @@ case-name/HTML safety and final cross-category traceability.
   4. Any bug in `hallucinationCheck.ts` exposed by the ambiguous-match cases is fixed while preserving the "never throw" contract (`checkCitationsForHallucinations` still returns without throwing for not-found/rate-limited cases).
   5. Any bug in `caseNamesMatch`/`normalizeCaseNameParty` exposed by short-form, supra, or ambiguous-match cases is fixed, with new adversarial regression cases added (e.g. empty/punctuation-only parties, single-letter parties, substring-contained abbreviations) mirroring the bypass patterns already documented in `SECURITY_AUDIT.md`.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
-- [ ] 02-01-PLAN.md — Port short-form/supra/FIX-03 tests (RED) and fix the comma-before-"at" regex gap, locator-based short-form clustering, and the `caseNameMatchesToken` raw-substring bypass in `citationParser.ts` (GREEN), with a permanent ReDoS benchmark [TEST-02, TEST-03, FIX-03]
+- [x] 02-01-PLAN.md — Port short-form/supra/FIX-03 tests (RED) and fix the comma-before-"at" regex gap, locator-based short-form clustering, and the `caseNameMatchesToken` raw-substring bypass in `citationParser.ts` (GREEN), with a permanent ReDoS benchmark [TEST-02, TEST-03, FIX-03]
 - [ ] 02-02-PLAN.md — Port ambiguous-match tests (RED) and fix `courtListenerProvider.lookupCitation`'s silent multi-cluster collapse via `caseNamesMatch` disambiguation + a new `ambiguousMatch` field propagated as a distinct outcome through `hallucinationCheck` (GREEN) [TEST-04, FIX-02]
 
 ### Phase 3: Case-Name & HTML Safety, Full Traceability
@@ -84,5 +84,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Reporter-Spacing Normalization | 1/1 | Complete    | 2026-07-15 |
-| 2. Short-Form, Supra & Ambiguous-Match Resolution | 0/2 | Not started | - |
+| 2. Short-Form, Supra & Ambiguous-Match Resolution | 1/2 | In Progress|  |
 | 3. Case-Name & HTML Safety, Full Traceability | 0/TBD | Not started | - |
