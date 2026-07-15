@@ -96,7 +96,19 @@ export async function checkCitationsForHallucinations(
       }
     }
 
-    results.push({ raw, verifiedVia, skippedProviders, rateLimitedProviders, nameMismatch, ambiguousMatch });
+    // WR-01 (02-REVIEW.md): nameMismatch/ambiguousMatch may have been set by an earlier provider
+    // that couldn't confirm the citation, before a later provider in the loop verified it cleanly
+    // (verifiedVia set via break). Clear the softer signals once verification succeeds so a caller
+    // that checks ambiguousMatch/nameMismatch before verifiedVia doesn't flag a citation a later
+    // provider actually confirmed.
+    results.push({
+      raw,
+      verifiedVia,
+      skippedProviders,
+      rateLimitedProviders,
+      nameMismatch: verifiedVia ? undefined : nameMismatch,
+      ambiguousMatch: verifiedVia ? undefined : ambiguousMatch,
+    });
   }
 
   return results;
