@@ -1,5 +1,10 @@
 import { parseCaseCitation, extractCaseCitations } from '../src/providers/citationParser';
-import { normalizeReporterSpacing } from '../src/utils';
+import {
+  normalizeReporterSpacing,
+  setReporterSpacingNormalizationEnabled,
+  isReporterSpacingNormalizationEnabled,
+  resetReporterSpacingNormalization,
+} from '../src/utils';
 
 describe('CourtListener ported tests: reporter-spacing normalization', () => {
   // Source: cl/citations/tests.py, class CitationTextTest, method
@@ -136,5 +141,36 @@ describe('CourtListener ported tests: reporter-spacing normalization', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.reporter).toBe(expected);
     expect(parsed!.reporterRaw).toBe(reporterForm);
+  });
+});
+
+// New opt-out feature (not a CourtListener-ported test): added so a host integration can disable
+// normalizeReporterSpacing at runtime if a problem is found in production, without waiting on a
+// library update -- see the rationale comment above setReporterSpacingNormalizationEnabled in
+// src/utils.ts.
+describe('normalizeReporterSpacing toggle: host opt-out for production issues', () => {
+  afterEach(() => {
+    resetReporterSpacingNormalization();
+  });
+
+  test('defaults to enabled so existing reporter-spacing behavior is unaffected', () => {
+    expect(isReporterSpacingNormalizationEnabled()).toBe(true);
+  });
+
+  test('disabling the toggle leaves "22 U. S. 33" reporter spacing unchanged', () => {
+    setReporterSpacingNormalizationEnabled(false);
+    const parsed = parseCaseCitation('Marbury v. Madison, 22 U. S. 33 (1803)');
+    expect(parsed).not.toBeNull();
+    expect(parsed!.reporter).toBe('U. S.');
+  });
+
+  test('re-enabling the toggle restores normalization to "U.S."', () => {
+    setReporterSpacingNormalizationEnabled(false);
+    const disabled = parseCaseCitation('Marbury v. Madison, 22 U. S. 33 (1803)');
+    expect(disabled!.reporter).toBe('U. S.');
+
+    setReporterSpacingNormalizationEnabled(true);
+    const reenabled = parseCaseCitation('Marbury v. Madison, 22 U. S. 33 (1803)');
+    expect(reenabled!.reporter).toBe('U.S.');
   });
 });
