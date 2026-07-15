@@ -117,6 +117,15 @@ export interface OpinionExcerptResult {
    * callers should tell the user to wait and retry, not report this the same as "not found".
    */
   rateLimited?: boolean;
+  /**
+   * Set when the provider's lookup resolved this citation's locator (reporter/volume/page) to
+   * more than one distinct candidate case and case-name matching could not narrow it to exactly
+   * one -- mirrors `CitationMatch.ambiguousMatch`. When set, `excerpt` is always null: attaching
+   * one candidate's opinion text into the document under an ambiguous citation would be a
+   * stronger, more damaging version of the "false verified" problem than a plain wrong hyperlink,
+   * since it inserts fabricated-looking supporting text rather than just a link.
+   */
+  ambiguousMatch?: { candidateCount: number };
 }
 
 /**

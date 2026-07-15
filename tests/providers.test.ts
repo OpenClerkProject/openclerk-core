@@ -675,6 +675,81 @@ describe('CourtListenerProvider', () => {
       const { excerpt } = await provider.fetchOpinionExcerpt({ raw: EXAMPLE_CITATION }, [490]);
       expect(excerpt).toContain('Holding from HTML.');
     });
+
+    // Regression test for 02-REVIEW.md CR-01: resolveClusterId (used exclusively by
+    // fetchOpinionExcerpt) used to take clusters[0] unconditionally, with no case-name
+    // disambiguation and no ambiguity signal at all. A caller using "Embed Cited Text" on an
+    // ambiguous citation could silently attach a different case's opinion text into the document
+    // under the citation the user actually wrote.
+    test('CR-01 regression: refuses to fetch/return opinion text when the locator resolves to an ambiguous match', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      const provider = new CourtListenerProvider();
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] });
+      await provider.authenticate({ apiToken: 'secret-token' });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            citation: '114 F.3d 1182',
+            status: 200,
+            clusters: [
+              { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+              { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+            ],
+          },
+        ],
+      });
+
+      // Neither cluster's case_name matches the citing document's own parsed case name, so
+      // case-name disambiguation cannot narrow this to a single confident match.
+      const result = await provider.fetchOpinionExcerpt(
+        { raw: '114 F.3d 1182', caseName: 'Unrelated Party v. Another Party' },
+        [1182]
+      );
+
+      expect(result).toEqual({ excerpt: null, ambiguousMatch: { candidateCount: 2 } });
+      // Only the citation-lookup call fires -- the opinions-by-cluster endpoint must never be hit
+      // once the locator is known to be ambiguous.
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('CR-01 regression: still resolves and returns the opinion excerpt when case name disambiguates a multi-cluster locator', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      const provider = new CourtListenerProvider();
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] });
+      await provider.authenticate({ apiToken: 'secret-token' });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            citation: '114 F.3d 1182',
+            status: 200,
+            clusters: [
+              { case_name: 'Doe v. Roe', absolute_url: '/opinion/111/doe-v-roe/' },
+              { case_name: 'Smith v. Jones', absolute_url: '/opinion/222/smith-v-jones/' },
+            ],
+          },
+        ],
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ results: [{ plain_text: '*1182 Holding for Smith v. Jones.' }] }),
+      });
+
+      const result = await provider.fetchOpinionExcerpt({ raw: '114 F.3d 1182', caseName: 'Smith v. Jones' }, [1182]);
+
+      expect(result.ambiguousMatch).toBeUndefined();
+      expect(result.excerpt).toContain('Holding for Smith v. Jones.');
+    });
   });
 });
 
