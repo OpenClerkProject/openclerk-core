@@ -8,6 +8,7 @@ import {
 } from "./types";
 import { extractPageExcerpt, stripHtmlTags } from "./opinionTextExtractor";
 import { getHttpClient, HttpResponse } from "../http";
+import { caseNamesMatch } from "./citationParser";
 
 const API_BASE = "https://www.courtlistener.com/api/rest/v4";
 const SITE_ORIGIN = "https://www.courtlistener.com";
@@ -134,6 +135,31 @@ export class CourtListenerProvider implements OpinionTextCapableProvider, RateLi
     for (const result of results) {
       if (result.status !== 200 || !Array.isArray(result.clusters) || result.clusters.length === 0) {
         continue;
+      }
+
+      // Finding 4 (02-RESEARCH.md): a locator can genuinely resolve to more than one real case
+      // (e.g. duplicate/parallel citation records). Silently taking clusters[0] here would be the
+      // exact "false verified" outcome this project's Core Value forbids. Try to disambiguate by
+      // case name first (reusing the same caseNamesMatch the hallucination check itself trusts);
+      // only flag ambiguousMatch when that can't narrow it to exactly one candidate.
+      if (result.clusters.length > 1) {
+        const named = citation.caseName
+          ? result.clusters.filter((c) => c.case_name && caseNamesMatch(citation.caseName!, c.case_name))
+          : [];
+        const disambiguated = named.length === 1 ? named[0] : undefined;
+        const bestGuess = disambiguated ?? result.clusters.find((c) => c.absolute_url);
+        if (!bestGuess || !bestGuess.absolute_url) {
+          continue;
+        }
+        const match: CitationMatch = {
+          url: `${SITE_ORIGIN}${bestGuess.absolute_url}`,
+          caseName: bestGuess.case_name,
+          citation: result.citation,
+        };
+        if (!disambiguated) {
+          match.ambiguousMatch = { candidateCount: result.clusters.length };
+        }
+        return match;
       }
 
       const cluster = result.clusters[0];

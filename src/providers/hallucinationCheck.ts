@@ -60,6 +60,7 @@ export async function checkCitationsForHallucinations(
     const parsed = parseCaseCitation(raw) || { raw };
     let verifiedVia: string | null = null;
     let nameMismatch: { provider: string; foundCaseName: string } | undefined;
+    let ambiguousMatch: { provider: string; candidateCount: number } | undefined;
     const skippedProviders: string[] = [];
     const rateLimitedProviders: string[] = [];
 
@@ -70,6 +71,17 @@ export async function checkCitationsForHallucinations(
       }
       const match = await provider.lookupCitation(parsed);
       if (match) {
+        // Finding 4 (02-RESEARCH.md): an ambiguous provider result already means "we couldn't be
+        // sure which real case this is" regardless of what match.caseName happens to say, so this
+        // check runs BEFORE the case-name-mismatch check below and is a distinct third outcome --
+        // never counted as verifiedVia, never as nameMismatch. Purely additive if/continue, no new
+        // throw path, preserving FIX-02's never-throw contract.
+        if (match.ambiguousMatch) {
+          if (!ambiguousMatch) {
+            ambiguousMatch = { provider: provider.name, candidateCount: match.ambiguousMatch.candidateCount };
+          }
+          continue;
+        }
         if (!parsed.caseName || !match.caseName || caseNamesMatch(parsed.caseName, match.caseName)) {
           verifiedVia = provider.name;
           break;
@@ -84,7 +96,7 @@ export async function checkCitationsForHallucinations(
       }
     }
 
-    results.push({ raw, verifiedVia, skippedProviders, rateLimitedProviders, nameMismatch });
+    results.push({ raw, verifiedVia, skippedProviders, rateLimitedProviders, nameMismatch, ambiguousMatch });
   }
 
   return results;
