@@ -21,7 +21,7 @@ case-name/HTML safety and final cross-category traceability.
 
 - [x] **Phase 1: Reporter-Spacing Normalization** - Port reporter-spacing edge-case tests and fix any parser normalization bug they expose, without introducing new ReDoS risk (completed 2026-07-15)
 - [x] **Phase 2: Short-Form, Supra & Ambiguous-Match Resolution** - Port short-form/supra/ambiguous-match tests and fix the caseNamesMatch/hallucinationCheck bugs they expose (completed 2026-07-15)
-- [ ] **Phase 3: Case-Name & HTML Safety, Full Traceability** - Port HTML-escaping/case-name-safety tests and finalize the dedicated ported-test file across all four categories
+- [x] **Phase 3: Case-Name & HTML Safety, Full Traceability** - Port HTML-escaping/case-name-safety tests and finalize the dedicated ported-test file across all four categories (completed 2026-07-15)
 
 ## Phase Details
 
@@ -87,4 +87,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Reporter-Spacing Normalization | 1/1 | Complete    | 2026-07-15 |
 | 2. Short-Form, Supra & Ambiguous-Match Resolution | 2/2 | Complete    | 2026-07-15 |
-| 3. Case-Name & HTML Safety, Full Traceability | 1/1 | In Progress|  |
+| 3. Case-Name & HTML Safety, Full Traceability | 1/1 | Complete    | 2026-07-15 |

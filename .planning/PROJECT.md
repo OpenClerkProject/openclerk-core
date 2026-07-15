@@ -22,12 +22,12 @@ Citations extracted and matched by this library must be correct and never silent
 - ✓ Opt-out toggle for reporter-spacing normalization (`setReporterSpacingNormalizationEnabled`/`isReporterSpacingNormalizationEnabled`/`resetReporterSpacingNormalization`, mirroring the `http.ts` swappable-client pattern) — emerged during Phase 1 UAT sign-off as a risk mitigation, shipped as a quick task
 - ✓ Short-form and `supra`-style citation resolution ported from CourtListener into `tests/courtListenerPorted.test.ts`; three reproduced bugs fixed: missing optional comma before "at" (`"515 U.S., at 240"` was unparseable), locator-based short-form misattachment (bare short forms now resolve by their own volume/reporter before falling back to the most-recently-seen citation), and `caseNameMatchesToken`'s raw-substring bypass (rewritten to delegate to the already-hardened `normalizeCaseNameParty`/`partyWordsContain`) — Phase 2
 - ✓ Ambiguous-match detection: `CitationMatch`/`HallucinationCheckResult`/`OpinionExcerptResult` gained an `ambiguousMatch?: { candidateCount }` field; `CourtListenerProvider.lookupCitation` and `resolveClusterId` (used by "Embed Cited Text") both now disambiguate multi-cluster locator results via `caseNamesMatch` instead of silently taking the first candidate — Phase 2
+- ✓ HTML-escaping / case-name-with-punctuation safety ported from CourtListener into `tests/courtListenerPorted.test.ts` — `escapeHtml`, `isSafeHyperlinkUrl`, `stripHtmlHyperlinks`, and `stripHtmlTags` were all confirmed already correct against CourtListener's real adversarial case-name/script-injection fixtures (no production bug found); code review caught and fixed two test-quality issues instead (a flaky wall-clock ReDoS benchmark ceiling, an overstated "lossless round-trip" claim) — Phase 3
+- ✓ `tests/courtListenerPorted.test.ts` provides complete, source-traceable coverage across all four portable CourtListener categories (reporter-spacing, short-form/supra/ambiguous-match, HTML-escaping), audited end-to-end across all three phases — Phase 3, closes TEST-06 and the CourtListener test-porting milestone
 
 ### Active
 
-- [ ] Port applicable test cases from CourtListener's own citation test suite (`cl/citations/tests.py`) into a new dedicated test file, covering the remaining portable category:
-  - [ ] HTML-escaping / case-name-with-punctuation safety (quotes, ampersands, script-injection-shaped input)
-- [ ] Fix any bugs in `src/providers/citationParser.ts` and `src/providers/hallucinationCheck.ts` that the ported tests expose
+None — this milestone's scope is fully shipped. See Out of Scope below for what remains deliberately unaddressed.
 
 ### Out of Scope
 
@@ -66,6 +66,7 @@ Source material for this work: `https://github.com/freelawproject/courtlistener/
 | Add an opt-out toggle for `normalizeReporterSpacing` | Requested during UAT sign-off as a production safety net for a heuristic-based fix, mirroring the existing `http.ts` swappable-client pattern; defaults to enabled, fully backward compatible | ✓ Good — shipped as quick task 260715-ki4 |
 | Do not presuppose a bug in short-form/supra resolution before researching | `clusterCitationTokens` already existed and looked correct on a static read; research was tasked with confirming or disproving rather than assuming | ⚠️ Revisit as a blanket heuristic — Phase 2's research reproduced 3 real bugs against the actual built library (comma-before-"at", locator misattachment, `caseNameMatchesToken` bypass) that a static read alone would likely have missed. The lesson isn't "assume no bug" — it's "always let research execute against real input before trusting a static read either way." |
 | Ambiguous-match surfacing via `ambiguousMatch?: { candidateCount }` field, mirroring `nameMismatch` | Follows the existing "found something, with a caveat" optional-field convention (`rateLimited?`, `nameMismatch?`) rather than a breaking return-type change | ✓ Good — Phase 2, and code review caught that the initial fix only covered `lookupCitation`; extended to the sibling `resolveClusterId` (CR-01) before merge |
+| Scope TEST-05 to the 4 functions that actually touch HTML (`escapeHtml`, `isSafeHyperlinkUrl`, `stripHtmlHyperlinks`, `stripHtmlTags`) rather than inventing a citation-to-HTML rendering pipeline | Repo-wide grep confirmed these are the only HTML-touching functions; this library is platform-agnostic and doesn't render citations into HTML itself (that's host-side) | ✓ Good — Phase 3, all four confirmed already correct against real CourtListener adversarial fixtures |
 
 ## Evolution
 
@@ -85,4 +86,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 after Phase 2*
+*Last updated: 2026-07-15 after Phase 3 (milestone v1.0 complete)*

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
-current_phase_name: case-name-html-safety-full-traceability
-status: verifying
+current_phase: 3
+status: completed
 stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-07-15T22:14:40.891Z"
+last_updated: "2026-07-15T22:51:30.865Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 03 execution started
+last_activity_desc: Phase 3 complete
 progress:
   total_phases: 3
   completed_phases: 3
   total_plans: 4
   completed_plans: 4
+current_phase_name: case-name-html-safety-full-traceability
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 03 (case-name-html-safety-full-traceability) — EXECUTING
-Plan: 1 of 1
-Status: Phase complete — ready for verification
-Last activity: 2026-07-15 — Phase 03 execution started
+Phase: 3
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-07-15 — Phase 3 complete
 
 Progress: [██████████] 100%
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -48,6 +48,7 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 1 | 1 | - | - |
 | 2 | 2 | - | - |
+| 3 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -97,6 +98,11 @@ None yet.
 - IN-01 (Phase 1, info-level, non-blocking): `citationParser.ts:379,382-383,416,419-420` inconsistent optional-chaining style (`reporter.trim()` vs `caseName?.trim()`). Cosmetic, still unfixed.
 - IN-01 (Phase 2, info-level, non-blocking): `citationParser.ts` token-extraction regexes cap pincites to a single page while `parseCaseCitation`'s own short-form fallback captures a full list — pre-existing inconsistency, not introduced by Phase 2, still unfixed.
 - IN-02 (Phase 2, info-level, non-blocking): `courtListenerProvider.ts` builds hyperlink URLs via string concatenation without going through `isSafeHyperlinkUrl`; low practical risk (trusted HTTPS-only API) but worth centralizing if a `buildCourtListenerUrl` helper is ever added.
+- IN-01 (Phase 3, info-level, non-blocking): `tests/courtListenerPorted.test.ts:137-141,148-150` duplicates a 3-tuple fixture array across two `test.each` blocks — could drift out of sync if a corrections-table entry is added/removed. Still unfixed.
+- IN-02 (Phase 3, info-level, non-blocking): `tests/courtListenerPorted.test.ts:36,54` spreads a not-yet-narrowed `ParsedCitation | null` value, relying on non-strict `tsconfig.json`. Still unfixed.
+- IN-03 (Phase 3, info-level, non-blocking): `tests/courtListenerPorted.test.ts:455` has a stale character-count estimate in a benchmark comment (~1.6M claimed, ~1.8M actual). Still unfixed.
+
+**Milestone v1.0 (CourtListener test-porting) is complete** — all 9 requirements (TEST-01–06, FIX-01–03) shipped across 3 phases + 1 quick task. Remaining items above are all info-level/cosmetic, none blocking.
 
 ### Quick Tasks Completed
 
