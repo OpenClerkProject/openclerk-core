@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 02
-current_phase_name: short-form-supra-ambiguous-match-resolution
-status: verifying
+current_phase: 3
+current_phase_name: Case-Name & HTML Safety, Full Traceability
+status: planning
 stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-07-15T20:56:25.422Z"
+last_updated: "2026-07-15T21:33:06.383Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 02 execution started
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
   total_phases: 2
   completed_phases: 2
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Citations extracted and matched by this library must be correct and never silently wrong — a false "verified" or a missed hallucination undermines the entire point of the hallucination-check feature.
-**Current focus:** Phase 02 — short-form-supra-ambiguous-match-resolution
+**Current focus:** Phase 3 — Case-Name & HTML Safety, Full Traceability
 
 ## Current Position
 
-Phase: 02 (short-form-supra-ambiguous-match-resolution) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-07-15 — Phase 02 execution started
+Phase: 3 — Case-Name & HTML Safety, Full Traceability
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-15 — Phase 2 complete, transitioned to Phase 3
 
 Progress: [██████████] 100%
 
@@ -38,7 +38,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 1
+- Total plans completed: 3
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -47,6 +47,7 @@ Progress: [██████████] 100%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 1 | - | - |
+| 2 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -86,11 +87,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- `citationParser.ts` has twice produced quadratic/ReDoS regexes during past feature work (see CONCERNS.md) — any new/modified regex in Phase 2 must be benchmarked against adversarial input before merge.
-- `caseNamesMatch`/`normalizeCaseNameParty` (Phase 2) is a documented fragile area with two prior real bypasses fixed (empty-string substring bypass, short-fragment substring bypass) — new fixes need adversarial regression tests, not just fixture-based ones.
-- `hallucinationCheck.ts` fails open (reports "verified") when either parsed citation or provider match lacks a case name — a deliberate documented design choice to keep in mind when Phase 2's ambiguous-match tests are ported.
-- [Phase 1, resolved] A single-field normalization approach can silently break a downstream Bluebook-formatting consumer (CR-01/CR-02) — worth remembering as a general pattern if Phase 2's ambiguous-match fixes touch any field multiple downstream checks read (e.g. `caseName`).
-- IN-01 (info-level, non-blocking): `citationParser.ts:379,382-383,416,419-420` has inconsistent optional-chaining style (`reporter.trim()` vs `caseName?.trim()`). Cosmetic only, left unfixed (out of scope for the `critical_warning` code-review-fix pass).
+- `citationParser.ts` has twice produced quadratic/ReDoS regexes during past feature work (see CONCERNS.md) — any new/modified regex in Phase 3 must be benchmarked against adversarial input before merge.
+- `hallucinationCheck.ts` fails open (reports "verified") when either parsed citation or provider match lacks a case name — a deliberate documented design choice, still relevant for Phase 3's HTML-escaping category if it touches case-name rendering.
+- [Phase 1, resolved] A single-field normalization approach can silently break a downstream Bluebook-formatting consumer (CR-01/CR-02) — general pattern to watch for: when one field feeds two different downstream checks with different needs, consider a field split early.
+- [Phase 2, resolved] A fix applied to one function can leave an identical bug in a sibling function untouched (CR-01: `lookupCitation`'s ambiguous-match fix initially missed `resolveClusterId`) — worth a quick "any siblings?" grep whenever fixing a bug in a function that has a same-shaped twin.
+- IN-01 (Phase 1, info-level, non-blocking): `citationParser.ts:379,382-383,416,419-420` inconsistent optional-chaining style (`reporter.trim()` vs `caseName?.trim()`). Cosmetic, still unfixed.
+- IN-01 (Phase 2, info-level, non-blocking): `citationParser.ts` token-extraction regexes cap pincites to a single page while `parseCaseCitation`'s own short-form fallback captures a full list — pre-existing inconsistency, not introduced by Phase 2, still unfixed.
+- IN-02 (Phase 2, info-level, non-blocking): `courtListenerProvider.ts` builds hyperlink URLs via string concatenation without going through `isSafeHyperlinkUrl`; low practical risk (trusted HTTPS-only API) but worth centralizing if a `buildCourtListenerUrl` helper is ever added.
 
 ### Quick Tasks Completed
 

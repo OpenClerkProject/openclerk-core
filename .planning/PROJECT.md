@@ -20,12 +20,12 @@ Citations extracted and matched by this library must be correct and never silent
 - ✓ [Existing capability] In-memory-only credential handling for enterprise providers (`src/providers/base.ts`) — existing
 - ✓ Reporter-spacing/regex normalization edge cases ported from CourtListener into `tests/courtListenerPorted.test.ts`, and the reporter-spacing bug they exposed fixed via `normalizeReporterSpacing` + a `ParsedCitation.reporterRaw`/`reporter` field split (so Bluebook formatting checks still see as-written text while citation matching treats spacing variants as equivalent) — Phase 1
 - ✓ Opt-out toggle for reporter-spacing normalization (`setReporterSpacingNormalizationEnabled`/`isReporterSpacingNormalizationEnabled`/`resetReporterSpacingNormalization`, mirroring the `http.ts` swappable-client pattern) — emerged during Phase 1 UAT sign-off as a risk mitigation, shipped as a quick task
+- ✓ Short-form and `supra`-style citation resolution ported from CourtListener into `tests/courtListenerPorted.test.ts`; three reproduced bugs fixed: missing optional comma before "at" (`"515 U.S., at 240"` was unparseable), locator-based short-form misattachment (bare short forms now resolve by their own volume/reporter before falling back to the most-recently-seen citation), and `caseNameMatchesToken`'s raw-substring bypass (rewritten to delegate to the already-hardened `normalizeCaseNameParty`/`partyWordsContain`) — Phase 2
+- ✓ Ambiguous-match detection: `CitationMatch`/`HallucinationCheckResult`/`OpinionExcerptResult` gained an `ambiguousMatch?: { candidateCount }` field; `CourtListenerProvider.lookupCitation` and `resolveClusterId` (used by "Embed Cited Text") both now disambiguate multi-cluster locator results via `caseNamesMatch` instead of silently taking the first candidate — Phase 2
 
 ### Active
 
-- [ ] Port applicable test cases from CourtListener's own citation test suite (`cl/citations/tests.py`) into a new dedicated test file, covering the remaining three portable categories:
-  - [ ] Short-form and `supra`-style citation resolution requiring a preceding full citation
-  - [ ] Ambiguous-match detection — citations that should resolve to multiple candidates rather than a false single match
+- [ ] Port applicable test cases from CourtListener's own citation test suite (`cl/citations/tests.py`) into a new dedicated test file, covering the remaining portable category:
   - [ ] HTML-escaping / case-name-with-punctuation safety (quotes, ampersands, script-injection-shaped input)
 - [ ] Fix any bugs in `src/providers/citationParser.ts` and `src/providers/hallucinationCheck.ts` that the ported tests expose
 
@@ -43,7 +43,7 @@ This is a brownfield project — `.planning/codebase/` contains a full codebase 
 
 Relevant prior findings from `CONCERNS.md`:
 - `citationParser.ts` (439 lines) has twice produced quadratic/ReDoS regexes during past feature work, both since fixed and documented in `SECURITY_AUDIT.md`. Any new regex touching full document text needs adversarial-input benchmarking.
-- `caseNamesMatch` / `normalizeCaseNameParty` in `citationParser.ts` (consumed by `hallucinationCheck.ts`) is flagged as fragile — the exact area CourtListener's ambiguous-match and reporter-normalization tests would exercise. Two real bypasses were already found and fixed here (empty-string substring bypass, short-fragment substring bypass).
+- `caseNamesMatch` / `normalizeCaseNameParty` in `citationParser.ts` (consumed by `hallucinationCheck.ts`) is flagged as fragile — the exact area CourtListener's ambiguous-match and reporter-normalization tests would exercise. Two real bypasses were already found and fixed here (empty-string substring bypass, short-fragment substring bypass). Phase 2 found a third instance of the same bypass class living in a sibling comparator, `caseNameMatchesToken` (used by `clusterCitationTokens`, not `caseNamesMatch` itself) — it had never received the same hardening. Any future function that independently compares case names should be checked against this pattern.
 - `hallucinationCheck.ts` fails open (reports "verified") when either the parsed citation or the provider match lacks a case name — a documented, deliberate design choice worth keeping in mind when porting ambiguous-match tests.
 
 Source material for this work: `https://github.com/freelawproject/courtlistener/blob/main/cl/citations/tests.py` (CourtListener's own citation-matching test suite, ~9 classes / ~35 test methods). Only a subset is portable to this standalone library; see Active requirements above for the four portable categories identified.
@@ -64,6 +64,8 @@ Source material for this work: `https://github.com/freelawproject/courtlistener/
 | Scope includes fixing bugs the ported tests expose, not just adding tests | User explicitly confirmed "tests + fixes" over "tests only" | ✓ Good — Phase 1 code review found and fixed 2 real regressions (CR-01/CR-02) this scope decision would have missed |
 | Split `ParsedCitation.reporter` into normalized (`reporter`) and as-written (`reporterRaw`) fields | Code review found that normalizing `reporter` at the source silently defeated the Bluebook reporter-format checker for 138 documented reporters-db typo entries (CR-02); a single field couldn't serve both citation-matching and Bluebook-formatting needs | ✓ Good — Phase 1 |
 | Add an opt-out toggle for `normalizeReporterSpacing` | Requested during UAT sign-off as a production safety net for a heuristic-based fix, mirroring the existing `http.ts` swappable-client pattern; defaults to enabled, fully backward compatible | ✓ Good — shipped as quick task 260715-ki4 |
+| Do not presuppose a bug in short-form/supra resolution before researching | `clusterCitationTokens` already existed and looked correct on a static read; research was tasked with confirming or disproving rather than assuming | ⚠️ Revisit as a blanket heuristic — Phase 2's research reproduced 3 real bugs against the actual built library (comma-before-"at", locator misattachment, `caseNameMatchesToken` bypass) that a static read alone would likely have missed. The lesson isn't "assume no bug" — it's "always let research execute against real input before trusting a static read either way." |
+| Ambiguous-match surfacing via `ambiguousMatch?: { candidateCount }` field, mirroring `nameMismatch` | Follows the existing "found something, with a caveat" optional-field convention (`rateLimited?`, `nameMismatch?`) rather than a breaking return-type change | ✓ Good — Phase 2, and code review caught that the initial fix only covered `lookupCitation`; extended to the sibling `resolveClusterId` (CR-01) before merge |
 
 ## Evolution
 
@@ -83,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 after Phase 1*
+*Last updated: 2026-07-15 after Phase 2*
