@@ -13,7 +13,56 @@ export function normalizeText(value: string): string {
 // and "Ct." don't qualify (second character is lowercase, not "."). Bounded to a single already-
 // extracted reporter substring (never full document text), so this carries none of the ReDoS risk
 // documented for citationParser.ts's other regexes: confirmed linear, 66ms at 1.8M characters.
+//
+// This positional heuristic is necessarily context-free -- it cannot see which single-capital-
+// letter reporters are, per Free Law Project's reporters-db Table T1 data (vendored at
+// src/bluebook/generated/reporterAbbreviations.generated.ts and consumed by
+// src/bluebook/reporterRules.ts's checkReporterAbbreviation), an exception to the general
+// close-up rule (e.g. "A.L.R. 2d" legitimately keeps its space before the series digit) or a
+// documented non-standard spelling that Rule 6.1 checking needs to see verbatim in order to flag
+// it (e.g. "F. 2d", "C. C. A."). Found in code review (01-REVIEW.md CR-01/CR-02): applying the
+// regex unconditionally either corrupts the former into a false-looking error, or silently
+// "fixes" the latter before checkReporterAbbreviation ever runs, hiding a real Rule 6.1 violation.
+// RESERVED_REPORTER_SPACING_FORMS is a small, hand-verified exception list (checked against the
+// generated Table T1 data at review time) carving out both failure classes -- it is intentionally
+// NOT a general reporters-db-driven fix: src/utils.ts is a dependency-free leaf module and must
+// not import from src/bluebook/ (see CLAUDE.md's one-way providers -> bluebook non-dependency), so
+// a fully data-driven version of this guard would require moving/duplicating the generated table
+// into a shared leaf location -- out of scope here and tracked as a follow-up rather than
+// silently left unhandled. This list only covers the specific forms verified in 01-REVIEW.md; it
+// is not exhaustive of every reporters-db entry this heuristic could still mis-handle.
+const RESERVED_REPORTER_SPACING_FORMS = new Set<string>([
+  // CR-01: valid Table T1 forms that must round-trip unchanged (the space before the series
+  // digit/parenthetical is intentional, not a Rule 6.1 mistake).
+  "A.L.R. 2d",
+  "A.L.R. 3d",
+  "A.L.R. 4th",
+  "A.L.R. 5th",
+  "A.L.R. 6th",
+  "Am. Law T. Rep. (N. S.)",
+  "Amer. Law J. (N. S.)",
+  "Colo. J. C.A.R.",
+  "Colo. N. P.",
+  "Haz. U. S. Reg.",
+  "Law J. Q.B.",
+  "N. Y. City H. Rec.",
+  "Smith (N. H.)",
+  "Tex. L. R.",
+  "U. S. Law J.",
+  "U.S.P.Q. 2d (BNA)",
+  "Wash. C. C.",
+  // CR-02: documented reporters-db "corrections" typos that must reach
+  // checkReporterAbbreviation unmodified so its Rule 6.1 nonstandard-form check isn't silently
+  // defeated by this normalizer pre-correcting the mistake away.
+  "F. 2d",
+  "C. C. A.",
+  "N. E. 2d",
+]);
+
 export function normalizeReporterSpacing(reporter: string): string {
+  if (RESERVED_REPORTER_SPACING_FORMS.has(reporter)) {
+    return reporter;
+  }
   return reporter.replace(/\b([A-Z])\.\s+(?=[A-Z]\.|\d)/g, "$1.");
 }
 

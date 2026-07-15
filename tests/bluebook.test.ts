@@ -220,6 +220,29 @@ describe('reporter abbreviation checks (vendored reporters-db Table T1 data)', (
     expect(issues.some((i) => i.ruleId === 'reporter-nonstandard-form')).toBe(true);
     expect(issues.some((i) => i.ruleId === 'reporter-spacing')).toBe(false);
   });
+
+  // Regression tests for 01-REVIEW.md CR-02: normalizeReporterSpacing (src/utils.ts), wired into
+  // parseCaseCitation in Phase 1, must not silently "fix" a reporter string that reporters-db
+  // records as a documented non-standard form -- otherwise checkReporterAbbreviation never gets a
+  // chance to flag it, and a citation with a real Rule 6.1 mistake is reported as having zero
+  // reporter issues. Verified end-to-end before this fix (see 01-REVIEW.md CR-02): "F. 2d" arrived
+  // at this check already collapsed to "F.2d" -- a valid Table T1 form -- producing `[]` instead
+  // of a reporter-nonstandard-form issue.
+  test.each([
+    ['F. 2d', 'F.2d'],
+    ['C. C. A.', 'C.C.A.'],
+    ['N. E. 2d', 'N.E.2d'],
+  ])(
+    'reporter-nonstandard-form still fires for "%s" after parseCaseCitation normalization',
+    (reporterForm, correctForm) => {
+      const issues = checkCommonCaseCitationRules(
+        parseOrThrow(`Smith v. Jones, 123 ${reporterForm} 456 (2d Cir. 2010)`)
+      );
+      const flagged = issues.find((i) => i.ruleId === 'reporter-nonstandard-form');
+      expect(flagged).toBeDefined();
+      expect(flagged?.message).toContain(correctForm);
+    }
+  );
 });
 
 describe('page-range digit-dropping checks (Bluebook Rule 3.2)', () => {
