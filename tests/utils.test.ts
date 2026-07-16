@@ -3,6 +3,9 @@ import {
   isLikelyCaseCitation,
   extractParentheticalCitations,
   isSafeHyperlinkUrl,
+  escapeHtml,
+  toSafeHyperlinkUrl,
+  toSafeHtml,
 } from '../src/utils';
 
 describe('Citation helpers', () => {
@@ -46,5 +49,35 @@ describe('isSafeHyperlinkUrl', () => {
   test('rejects empty or whitespace-only input', () => {
     expect(isSafeHyperlinkUrl('')).toBe(false);
     expect(isSafeHyperlinkUrl('   ')).toBe(false);
+  });
+});
+
+describe('toSafeHyperlinkUrl', () => {
+  test('returns the same string value for an https URL', () => {
+    expect(toSafeHyperlinkUrl('https://example.com')).toBe('https://example.com');
+  });
+
+  test('returns null for a javascript: URL', () => {
+    expect(toSafeHyperlinkUrl('javascript:alert(1)')).toBeNull();
+  });
+
+  test('returns null for empty input', () => {
+    expect(toSafeHyperlinkUrl('')).toBeNull();
+  });
+
+  test('returns null for whitespace-only input', () => {
+    expect(toSafeHyperlinkUrl('   ')).toBeNull();
+  });
+});
+
+describe('toSafeHtml', () => {
+  test('escapes <, >, &, ", and \' identically to escapeHtml', () => {
+    const raw = `<script>alert("x" & 'y')</script>`;
+    expect(toSafeHtml(raw)).toBe(escapeHtml(raw));
+  });
+
+  test('never returns null', () => {
+    expect(toSafeHtml('')).not.toBeNull();
+    expect(toSafeHtml('plain text')).not.toBeNull();
   });
 });
