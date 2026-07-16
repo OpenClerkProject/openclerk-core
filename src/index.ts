@@ -5,6 +5,10 @@ export {
   escapeHtml,
   isSafeHyperlinkUrl,
   stripHtmlHyperlinks,
+  SafeHyperlinkUrl,
+  SafeHtml,
+  toSafeHyperlinkUrl,
+  toSafeHtml,
 } from "./utils";
 
 export * from "./providers";

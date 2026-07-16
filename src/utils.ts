@@ -163,6 +163,46 @@ export function escapeHtml(str: string): string {
 }
 
 /**
+ * Branded (nominal) type for a URL string that has already passed isSafeHyperlinkUrl. A plain
+ * `string` is structurally indistinguishable from a validated one, so this brand exists to make
+ * the compiler -- not convention or code review -- refuse to compile a call site that tries to
+ * pass an unvalidated string into an Office.js hyperlink-insertion call. The only way to produce
+ * a SafeHyperlinkUrl is toSafeHyperlinkUrl below.
+ */
+export type SafeHyperlinkUrl = string & { readonly __brand: "SafeHyperlinkUrl" };
+
+/**
+ * Branded (nominal) type for a string that has already passed through escapeHtml. Same rationale
+ * as SafeHyperlinkUrl: the compiler enforces that only escaped content reaches an Office.js
+ * insertHtml/insertComment call. The only way to produce a SafeHtml is toSafeHtml below.
+ *
+ * Branding here certifies DOM/hyperlink-insertion safety only -- it is never evidence that a
+ * citation is authentic or non-hallucinated. A fabricated citation can be perfectly safe to
+ * insert (well-escaped, allowlisted scheme) while still being entirely fake; SafeHtml/
+ * SafeHyperlinkUrl must never be read as a "verified real" signal by any consumer.
+ */
+export type SafeHtml = string & { readonly __brand: "SafeHtml" };
+
+/**
+ * Only way to produce a SafeHyperlinkUrl -- delegates to the existing isSafeHyperlinkUrl
+ * allowlist validator above rather than reimplementing it. Returns null (never throws) on
+ * invalid input, matching this codebase's "move on, don't crash" pattern for best-effort
+ * operations: callers skip the citation/URL rather than propagating an exception.
+ */
+export function toSafeHyperlinkUrl(url: string): SafeHyperlinkUrl | null {
+  return isSafeHyperlinkUrl(url) ? (url as SafeHyperlinkUrl) : null;
+}
+
+/**
+ * Only way to produce a SafeHtml -- delegates to the existing escapeHtml function above rather
+ * than reimplementing escaping. escapeHtml is a total function (it cannot fail on any input), so
+ * unlike toSafeHyperlinkUrl this never returns null.
+ */
+export function toSafeHtml(raw: string): SafeHtml {
+  return escapeHtml(raw) as SafeHtml;
+}
+
+/**
  * Escapes regex metacharacters so a data-driven string (e.g. a vendored reporters-db entry) can
  * be safely spliced into a `new RegExp(...)` call site without being interpreted as a pattern.
  */
