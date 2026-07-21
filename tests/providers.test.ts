@@ -2,6 +2,7 @@ import { parseCaseCitation, extractCaseCitations } from '../src/providers/citati
 import { CitationProviderRegistry } from '../src/providers/registry';
 import { CourtListenerProvider } from '../src/providers/courtListenerProvider';
 import { LexisNexisProvider } from '../src/providers/lexisNexisProvider';
+import { WestlawProvider } from '../src/providers/westlawProvider';
 import { UsptoPatentCenterProvider } from '../src/providers/usptoPatentCenterProvider';
 import { CitationProvider } from '../src/providers/types';
 
@@ -855,6 +856,167 @@ describe('EnterpriseCitationProvider (LexisNexis as representative)', () => {
       provider.authenticate({ apiBaseUrl: 'http://insecure.example.com', clientId: 'id', clientSecret: 'secret' })
     ).rejects.toThrow(/https/i);
     expect(provider.isAuthenticated()).toBe(false);
+  });
+});
+
+describe('EnterpriseCitationProvider OAuth2 token request shape (Westlaw / LexisNexis)', () => {
+  // These vendors' real token shapes differ in confirmed ways (see
+  // .planning/research/vendor-oauth-endpoints-code-evidence.md): Thomson Reuters uses a single
+  // fixed CIAM token host with the credentials in the body plus a required `audience`; LexisNexis
+  // uses a fixed auth-api host with HTTP Basic credentials and a required `scope`, no `audience`.
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  function tokenOkFetch(): jest.Mock {
+    return jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ access_token: 't0ken' }) });
+  }
+
+  // --- Westlaw / Thomson Reuters: body credentials + required audience, fixed CIAM token host ---
+
+  test('Westlaw: rejects authenticate() when the required audience is missing', async () => {
+    const provider = new WestlawProvider();
+    await expect(
+      provider.authenticate({ apiBaseUrl: 'https://tenant.api.thomsonreuters.com', clientId: 'id', clientSecret: 'secret' })
+    ).rejects.toThrow(/Missing required field.*Audience/i);
+  });
+
+  test('Westlaw: posts client-credentials to the fixed Thomson Reuters token host with audience in the body', async () => {
+    const mockFetch = tokenOkFetch();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new WestlawProvider();
+
+    await provider.authenticate({
+      apiBaseUrl: 'https://tenant.api.thomsonreuters.com',
+      clientId: 'id-123',
+      clientSecret: 'secret-xyz',
+      audience: 'aud-guid-42',
+      scope: 's1 s2',
+    });
+    expect(provider.isAuthenticated()).toBe(true);
+
+    const [url, init] = mockFetch.mock.calls[0];
+    // Fixed CIAM host, NOT derived by concatenating a path onto apiBaseUrl.
+    expect(url).toBe('https://auth.thomsonreuters.com/oauth/token');
+    const body = init.body as URLSearchParams;
+    expect(body.get('grant_type')).toBe('client_credentials');
+    expect(body.get('client_id')).toBe('id-123');
+    expect(body.get('client_secret')).toBe('secret-xyz');
+    expect(body.get('audience')).toBe('aud-guid-42');
+    expect(body.get('scope')).toBe('s1 s2');
+    // TR carries credentials in the body, so there must be no Basic header.
+    expect(init.headers['Authorization']).toBeUndefined();
+  });
+
+  test('Westlaw: honors an explicit tokenUrl override verbatim', async () => {
+    const mockFetch = tokenOkFetch();
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    await new WestlawProvider().authenticate({
+      apiBaseUrl: 'https://tenant.api.thomsonreuters.com',
+      clientId: 'id',
+      clientSecret: 'secret',
+      audience: 'aud',
+      tokenUrl: 'https://auth.eu.thomsonreuters.com/oauth/token',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe('https://auth.eu.thomsonreuters.com/oauth/token');
+  });
+
+  test('Westlaw: rejects an http:// tokenUrl before the client secret is sent anywhere', async () => {
+    const mockFetch = tokenOkFetch();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new WestlawProvider();
+
+    await expect(
+      provider.authenticate({
+        apiBaseUrl: 'https://tenant.api.thomsonreuters.com',
+        clientId: 'id',
+        clientSecret: 'secret',
+        audience: 'aud',
+        tokenUrl: 'http://auth.insecure.example/oauth/token',
+      })
+    ).rejects.toThrow(/https/i);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(provider.isAuthenticated()).toBe(false);
+  });
+
+  // --- LexisNexis: HTTP Basic credentials + required scope (no audience), fixed auth-api host ---
+
+  test('LexisNexis: posts to the fixed auth-api host using HTTP Basic credentials and the default scope', async () => {
+    const mockFetch = tokenOkFetch();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new LexisNexisProvider();
+
+    await provider.authenticate({
+      apiBaseUrl: 'https://tenant.api.lexisnexis.com',
+      clientId: 'lex-id',
+      clientSecret: 'lex-secret',
+    });
+    expect(provider.isAuthenticated()).toBe(true);
+
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://auth-api.lexisnexis.com/oauth/v2/token');
+    const body = init.body as URLSearchParams;
+    expect(body.get('grant_type')).toBe('client_credentials');
+    expect(body.get('scope')).toBe('http://oauth.lexisnexis.com/all');
+    // Lexis carries credentials in the Basic header, so they must NOT appear in the body,
+    // and there is no audience parameter.
+    expect(body.get('client_id')).toBeNull();
+    expect(body.get('client_secret')).toBeNull();
+    expect(body.get('audience')).toBeNull();
+    const authHeader = init.headers['Authorization'] as string;
+    expect(authHeader.startsWith('Basic ')).toBe(true);
+    const decoded = Buffer.from(authHeader.slice('Basic '.length), 'base64').toString('utf8');
+    expect(decoded).toBe('lex-id:lex-secret');
+  });
+
+  test('LexisNexis: honors explicit tokenUrl and scope overrides', async () => {
+    const mockFetch = tokenOkFetch();
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    await new LexisNexisProvider().authenticate({
+      apiBaseUrl: 'https://tenant.api.lexisnexis.com',
+      clientId: 'id',
+      clientSecret: 'secret',
+      tokenUrl: 'https://auth-api.lexisnexis.com/oauth/v2/token/custom',
+      scope: 'http://oauth.lexisnexis.com/limited',
+    });
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://auth-api.lexisnexis.com/oauth/v2/token/custom');
+    expect((init.body as URLSearchParams).get('scope')).toBe('http://oauth.lexisnexis.com/limited');
+  });
+
+  test('LexisNexis: rejects an http:// tokenUrl before the client secret is sent anywhere', async () => {
+    const mockFetch = tokenOkFetch();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const provider = new LexisNexisProvider();
+
+    await expect(
+      provider.authenticate({
+        apiBaseUrl: 'https://tenant.api.lexisnexis.com',
+        clientId: 'id',
+        clientSecret: 'secret',
+        tokenUrl: 'http://auth-api.insecure.example/oauth/v2/token',
+      })
+    ).rejects.toThrow(/https/i);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  test('surfaces a descriptive error (not a raw one) when the token endpoint rejects the credentials', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    await expect(
+      new WestlawProvider().authenticate({
+        apiBaseUrl: 'https://tenant.api.thomsonreuters.com',
+        clientId: 'id',
+        clientSecret: 'secret',
+        audience: 'aud',
+      })
+    ).rejects.toThrow(/Authentication failed \(HTTP 401\)/);
   });
 });
 
