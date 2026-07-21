@@ -31,6 +31,7 @@ export {
   trimTrailingSlash,
   fetchClientCredentialsToken,
 } from "./providers/base";
+export type { ClientCredentialsTokenOptions } from "./providers/base";
 export { extractPageExcerpt, stripHtmlTags } from "./providers/opinionTextExtractor";
 export { reconstructFullPageNumber } from "./providers/pincitePages";
 

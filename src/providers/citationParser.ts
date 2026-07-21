@@ -378,7 +378,11 @@ export function findOrphanedCitations(text: string): CitationToken[] {
   const tokens = extractCitationTokens(text);
   const clusters = clusterCitationTokens(tokens);
   const clustered = new Set<CitationToken>();
-  clusters.forEach((cluster) => cluster.tokens.forEach((token) => clustered.add(token)));
+  for (const cluster of clusters) {
+    for (const token of cluster.tokens) {
+      clustered.add(token);
+    }
+  }
   return tokens.filter((token) => token.type !== "full" && !clustered.has(token));
 }
 

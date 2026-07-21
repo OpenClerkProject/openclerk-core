@@ -3,12 +3,14 @@ import { getHttpClient } from "../http";
 import { EnterpriseCitationProvider, fetchClientCredentialsToken, trimTrailingSlash } from "./base";
 
 /**
- * Bloomberg Law's API is contract-gated and invite-only: access and the
- * exact token/search paths are provisioned per customer, so there is no
- * single public endpoint OpenClerk can ship. This provider implements the
- * common OAuth2 client-credentials shape and a configurable base URL;
- * confirm the exact paths in your firm's Bloomberg Law API documentation
- * and adjust TOKEN_PATH/SEARCH_PATH below if they differ.
+ * Bloomberg Law's API is contract-gated and invite-only. Unlike Thomson Reuters and LexisNexis
+ * (whose real OAuth2 shapes are now confirmed -- see
+ * .planning/research/vendor-oauth-endpoints-code-evidence.md), Bloomberg Law's programmatic auth
+ * could NOT be confirmed from any reachable evidence: no public integration was found, and
+ * Bloomberg's Terminal APIs use a different (JWT-per-request) model. This provider therefore
+ * remains a pure configurable shell that ASSUMES the common OAuth2 client-credentials shape with a
+ * base-URL-derived token path -- treat both TOKEN_PATH and SEARCH_PATH as unverified placeholders
+ * to confirm against your firm's Bloomberg Law API documentation before relying on this provider.
  */
 const TOKEN_PATH = "/oauth/token";
 const SEARCH_PATH = "/api/v1/search/cases";
