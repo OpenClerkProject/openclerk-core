@@ -32,32 +32,62 @@ far enough to even determine whether such a console exists on those pages, let a
 click through it. This is recorded as a tooling-availability limitation, not a
 site-side block, and is called out again in the Caveats section of the final report.
 
+**Follow-up pass (same session, orchestrator-level, with WebFetch + real browser tools
+available):** after the sub-agent execution above, the orchestrating session — which
+does have `WebFetch` and `mcp__Claude_Browser__*` available — went back over the 4
+SPA-gated URLs, the unreadable PDF, and the "Try it" console instruction directly. This
+closed some gaps and refined others; every change is reflected inline in the affected
+appendix items and Caveats entries below, each marked "(Follow-up pass finding:"). Net
+result: `dev.lexisnexis.com/gettingStarted` (item 6) is now fully read via the browser
+tool's real Chromium rendering — the earlier SPA-shell block was a genuine tooling gap
+now closed. The CM/ECF hyperlinking PDF (item 11) is now fully text-extracted via
+`pdftotext` (present on this machine even though `pdftoppm`, which the `Read` tool's
+PDF pipeline requires, is not). `developers.thomsonreuters.com` and its two catalog
+sub-pages (items 4a/4b/4c) remain unread, but for a **different and more specific**
+reason than originally recorded: WebFetch confirmed the same non-JS shell as the
+sub-agent's raw fetch, but the real browser tool got further — it successfully
+navigated and the page `<title>` rendered (proof the JS app does execute) — and then
+blocked all content-reading calls (`get_page_text`, `read_page`, `computer` screenshot)
+with "This site requires per-action approval; Browser read tools are not available on
+it." This is a per-origin approval gate in the browser tool itself, not a technical
+JS-rendering limitation and not a Thomson Reuters access control — it requires the
+user's explicit action in their own client to grant, which this session cannot do on
+its own. See the Caveats section for the exact error text.
+
 ## Executive Summary
 
-Since the network-sandboxed prior session, this session directly retrieved 12 of the
-16 target pages (the remaining 4 were blocked by client-side-rendering or an
-authenticated-session wall — see Caveats). The most concrete new evidence is Thomson
-Reuters' own documented OAuth2 client-credentials shape for its 3E API (auth URL and
-API base URL are separate, contract-assigned values; the token request requires
-`client_id`, `client_secret`, `grant_type=client_credentials`, **and `audience`**) —
-this directly contradicts the current `EnterpriseCitationProvider`/
-`fetchClientCredentialsToken` stub's assumption of a single base URL with an
-`/oauth/token` suffix and no `audience` field. Two independent, currently-dated (2026)
-law-library guides and two LexisNexis first-party support pages converged on the same
-conclusion for both vendors' citation deep links: they are opaque, UI-generated
-permalinks copied from a signed-in session, not a formula composable from a citation
-string, and Lexis's own "Link to Cites" feature can resolve a single citation to
-*multiple* candidate documents rather than one verified match. **Headline conclusion:
-neither Westlaw nor LexisNexis looks buildable as a real (non-stub) provider from this
-session's evidence alone.** The authoritative API catalogs for both vendors
-(`developers.thomsonreuters.com`, `dev.lexisnexis.com`) are client-rendered
-single-page applications this session's tooling could not execute, and the one
-Westlaw-specific technical page in scope (`westlaw-us-dockets-api`) sits behind an
-authenticated developer-portal session. Both providers should remain configurable
-shells pending a design-partner firm's real credentials and a validated live endpoint;
-nothing found in 16 sources suggests either vendor exposes a way to programmatically
-verify a citation without a signed-in human, which is the safety-critical constraint
-for `hallucinationCheck.ts`.
+Since the network-sandboxed prior session, this session directly retrieved 14 of the
+16 target pages (the remaining 3 — all three are the Thomson Reuters
+`developers.thomsonreuters.com` API catalog — are blocked by a browser-tool per-origin
+approval gate; see Caveats). The most concrete new evidence is Thomson Reuters' own
+documented OAuth2 client-credentials shape for its 3E API (auth URL and API base URL
+are separate, contract-assigned values; the token request requires `client_id`,
+`client_secret`, `grant_type=client_credentials`, **and `audience`**) — this directly
+contradicts the current `EnterpriseCitationProvider`/`fetchClientCredentialsToken`
+stub's assumption of a single base URL with an `/oauth/token` suffix and no `audience`
+field. Two independent, currently-dated (2026) law-library guides, two LexisNexis
+first-party support pages, **and now a fully-read 2013 federal-court CM/ECF
+hyperlinking guide (the single source most likely to document a legacy `cite=`-style
+query-string template)** all converged on the same conclusion for both vendors'
+citation deep links: they are opaque, UI-generated permalinks copied from a signed-in
+session, not a formula composable from a citation string — no source, old or new, shows
+a constructable URL template — and Lexis's own "Link to Cites" feature can resolve a
+single citation to *multiple* candidate documents rather than one verified match.
+LexisNexis's getting-started page (now fully read via a real browser) names only news
+(Metabase), litigation-analytics (Lex Machina), and legislative-tracking (State Net)
+APIs, plus two "Coming Soon" news APIs (MLex, Law360) — no case-law-by-citation or
+Shepard's API among them, though it also confirms the exact auth hostnames/token path
+are gated behind free developer registration, not published on the getting-started page
+itself. **Headline conclusion: neither Westlaw nor LexisNexis looks buildable as a real
+(non-stub) provider from this session's evidence alone.** The authoritative Thomson
+Reuters API catalog (`developers.thomsonreuters.com`) remains unread — blocked by a
+browser-tool approval gate the user would need to grant, not by TR's own access
+controls — and the one Westlaw-specific technical page in scope
+(`westlaw-us-dockets-api`) sits behind an authenticated developer-portal session. Both
+providers should remain configurable shells pending a design-partner firm's real
+credentials and a validated live endpoint; nothing found in 16 sources suggests either
+vendor exposes a way to programmatically verify a citation without a signed-in human,
+which is the safety-critical constraint for `hallucinationCheck.ts`.
 
 ## Open Questions — Resolved
 
@@ -100,12 +130,15 @@ session did not attempt to bypass, per the plan's explicit constraint.
 **Status: STILL UNRESOLVED, portal-gated.**
 
 The plan asked for a full enumerated catalog list from `developers.thomsonreuters.com`
-(appendix items 4a/4b/4c). None of the three catalog URLs returned server-rendered
-content in this session — all three are the identical shell of a client-side-routed
-React application (Webpack Module Federation), and this session's tooling cannot
-execute client-side JavaScript to render the catalog listing. **No full enumerated
-catalog list could be produced**, so this question cannot be given a definitive
-yes/no per the plan's own bar for evidence.
+(appendix items 4a/4b/4c). None of the three catalog URLs returned readable content in
+this session. (Follow-up pass finding: a real browser confirmed the page's JavaScript
+does execute — the tab title renders as "Thomson Reuters Developer Portal" — so this is
+no longer purely a "can't execute JS" tooling gap; the browser tool's content-reading
+calls were instead blocked by a per-origin approval requirement specific to this site,
+which requires the user's own action to grant and which this session could not grant on
+its own. See Caveats for the exact error text.) Either way, **no full enumerated
+catalog list could be produced**, so this question cannot be given a definitive yes/no
+per the plan's own bar for evidence.
 
 Circumstantial evidence from the pages that *were* readable leans toward "no, not
 found in this session's readable subset": appendix item 1's "Collaborate" API is a
@@ -118,52 +151,75 @@ access controls) rather than a confirmed "no."
 
 ### 4. Lexis auth shape
 
-**Status: STILL UNRESOLVED, portal-gated** (exact token host/path/grant type) **;
+**Status: STILL UNRESOLVED, registration-gated** (exact token host/path/grant type) **;
 REFUTED** (a documented case-law-by-citation API existing among the *named* Lexis API
 catalog).
 
-`dev.lexisnexis.com/gettingStarted` (appendix item 6) — the actual technical
-getting-started document that would state the exact token host/path and grant
-type — is a client-rendered Angular application; its server response contains no
-route content, so the token host/path/grant type **could not be confirmed** in this
-session. The `lexis-api.page` marketing page (appendix item 7) only confirms "OAuth
-2.0 authentication" generically, and only explicitly for the Protégé API; it gives no
-host, path, or grant-type detail.
+(Follow-up pass finding: `dev.lexisnexis.com/gettingStarted`, appendix item 6, is no
+longer SPA-blocked — a real browser rendered it fully and it was read in full.) The
+page confirms the getting-started document is a **catalog and use-case guide, not a
+technical auth reference**: it names the available APIs (Metabase Filters/Firehose/
+Search for news, Lex Machina for litigation analytics, State Net for legislation, MLex
+and Law360 marked "Coming Soon") and states plainly that "registering for a
+LexisNexis® Developer Portal account gives you access to detailed information and
+documentation on all our APIs, data delivery options, schemas, and sample code" — i.e.
+the exact token host/path/grant-type detail sits one step further behind a **free
+registration wall**, not behind unreadable client-side JavaScript. So the status is
+more precisely "registration-gated" than "portal-gated" now. The `lexis-api.page`
+marketing page (appendix item 7) still only confirms "OAuth 2.0 authentication"
+generically, and only explicitly for the Protégé API; it gives no host, path, or
+grant-type detail.
 
 On the second half of the question — whether case-law content is reachable via any
-*documented* API — the full named catalog on that marketing page (CourtLink API =
-dockets/litigation monitoring, Lex Machina API = litigation analytics, State Net API =
-legislation/regulatory data, Content API/Law360/MLex = news, and a vaguely-described
-generic "REST APIs" bucket for "Search and retrieve legal and news content") **names no
-API that retrieves full case-law text or metadata by a citation string, and none named
-as a Shepard's API.** This is a REFUTED finding for the *named, documented* catalog as
-retrieved — though it cannot rule out an undocumented capability, since the actual API
-reference (behind `dev.lexisnexis.com`) was unreachable.
+*documented* API — the full named catalog is now corroborated by **two independent
+LexisNexis-first-party pages** (item 6's getting-started catalog and item 7's
+marketing catalog), together naming: CourtLink API (dockets/litigation monitoring),
+Lex Machina API (litigation analytics), State Net API (legislation/regulatory data),
+Metabase Filters/Firehose/Search (news/social, item 6 only), Content API/Law360/MLex
+(news, "Coming Soon"), Protégé (generative-AI Q&A grounded in Lexis content, item 7
+only), and a vaguely-described generic "REST APIs" bucket for "Search and retrieve
+legal and news content." **Across both independently-read catalog pages, no API is
+named or described as retrieving full case-law text or metadata by a citation string,
+and none is named as a Shepard's API.** This is now a stronger REFUTED finding for the
+*named, documented* catalog (corroborated by two sources instead of one) — though it
+still cannot rule out an undocumented capability, since the actual API *reference*
+docs (schemas, sample code — one registration step beyond the getting-started page)
+remain unread.
 
 ### 5. Deep-link get-by-citation
 
-**Status: REFUTED** (as the plan's stated expectation for Westlaw's
-`find/default.wl?cite=` being the current, primary mechanism) **— with one important
-gap: STILL UNRESOLVED for the single source most likely to contain the classic
-query-string template** (appendix item 11, the federal CM/ECF hyperlinking PDF, which
-was retrieved but not text-extractable in this session — see Caveats).
+**Status: REFUTED** — for both the plan's stated expectation that Westlaw's
+`find/default.wl?cite=` is a current, composable query-string template, **and now also
+for the historical/legacy version of that same claim**, following the follow-up pass's
+successful text-extraction of appendix item 11 (see below).
 
-Four independent sources converge on the same picture for what current guidance
-actually documents: appendix items 10a and 10b (Lexis's own "Link to Cites" feature
-documentation) describe a **UI-driven** conversion inside a licensed Word add-in, not a
-publicly composable URL formula, and require an active Lexis/Lexis+ login. Appendix
-items 12a and 12b — two currently-dated (2026) academic law-library guides — describe
-**both** vendors' permalink creation as: navigate to the document in the vendor's own
-web interface, click a "link"/"hyperlink" icon, click "Copy Link" (Westlaw) or "Copy
-Citation" → "Copy citation as hyperlink" (Lexis Advance), and paste the resulting
-opaque URL. **No source retrieved in this session shows a `cite=`-style query-string
-template for either vendor as current, public guidance.** This refutes the plan's
-stated expectation that `find/default.wl?cite=` is confirmed still-current — but
-because appendix item 11 (the one source that could plausibly still document that
-legacy query-string format, used in real federal court filings) could not be
-text-extracted in this session, the historical/legacy format's continued existence is
-**neither confirmed nor refuted**, only absent from the four *current* consumer-facing
-sources this session could read.
+Five independent sources now converge on the same picture, spanning 2013 to 2026:
+appendix items 10a and 10b (Lexis's own "Link to Cites" feature documentation) describe
+a **UI-driven** conversion inside a licensed Word add-in, not a publicly composable URL
+formula, and require an active Lexis/Lexis+ login. Appendix items 12a and 12b — two
+currently-dated (2026) academic law-library guides — describe **both** vendors'
+permalink creation as: navigate to the document in the vendor's own web interface,
+click a "link"/"hyperlink" icon, click "Copy Link" (Westlaw) or "Copy Citation" → "Copy
+citation as hyperlink" (Lexis Advance), and paste the resulting opaque URL. (Follow-up
+pass finding: appendix item 11, a **federal CM/ECF attorney guide revised May 8,
+2013** — 13 years old, the single source most likely to document a legacy `cite=`-style
+query-string template, since neutral court guides are exactly where such internal
+formulas would leak into public documentation — was fully text-extracted via
+`pdftotext` in this follow-up pass. It documents **exactly the same** manual
+sign-in-and-copy-the-URL workflow as the two 2026 guides ("Sign into the legal research
+website and open the cited document. Select the url address for the document.
+Right-click, and Copy the address."), plus two now-largely-discontinued commercial
+Word-plugin tools — Westlaw InsertLinks and Shepard's/Lexis Links for Microsoft Office
+— that automate the same copy-into-Word workflow rather than composing a URL from a
+citation string. A full scan of every `http(s)://` URL in the 890-line extracted text
+found only three static tool-download/product URLs, none containing a `cite=` or
+`findType=` parameter.) **No source retrieved in this session — spanning 13 years of
+guidance, from a 2013 federal court manual to 2026 law-library guides — shows a
+`cite=`-style query-string template for either vendor, at any point.** This both
+refutes the plan's stated expectation that `find/default.wl?cite=` is confirmed
+still-current, and now also closes the historical gap: the one source that could
+plausibly have documented that legacy format, even from over a decade ago, does not
+contain it either.
 
 Separately, appendix item 9 (the wiki page reportedly documenting the Lexis URL API
 spec) no longer exists at its original address and redirects to an unrelated marketing
@@ -188,7 +244,11 @@ re-direct to the selected resource" — confirming neither resolves anonymously.
 source named an API or URL pattern framed as "verify this citation is genuine"; the
 closest capabilities found (CourtLink dockets, Lex Machina analytics, State Net
 legislation, TR's 3E matter API) are all unrelated to case-law verification by
-citation. **This directly confirms the load-bearing safety conclusion:
+citation. (Follow-up pass finding: appendix item 11's now-fully-read 2013 federal
+court guide adds a third, independent, much older corroborating source — its only
+documented linking methods are "sign into the legal research website" (manual) or a
+licensed Word-plugin tool, both requiring an authenticated session; neither is framed
+as citation verification.) **This directly confirms the load-bearing safety conclusion:
 `hallucinationCheck.ts` must continue relying on CourtListener (or another
 verification-capable provider) and must never treat a Westlaw/Lexis lookup result as a
 verification signal** — see the Redesign Proposal and Providers sections below for how
@@ -270,12 +330,17 @@ design-partner firm supplies real TR credentials and their firm-specific integra
 documentation, or until a future research session can authenticate into the TR
 developer portal to read the gated pages directly.
 
-**LexisNexis — configurable shell, not ready.** The actual API reference
-(`dev.lexisnexis.com`) is a client-rendered application this session could not
-execute, and no source found names a get-by-citation or verify-by-citation endpoint
-among the publicly documented catalog (CourtLink, Lex Machina, State Net, Content
-API/Law360/MLex, Protégé). Must remain a configurable shell for the same reasons as
-Westlaw.
+**LexisNexis — configurable shell, not ready.** The getting-started catalog page
+(`dev.lexisnexis.com/gettingStarted`) is now fully read (follow-up pass) and, together
+with the marketing catalog page, gives two independent, converging enumerations of the
+named API catalog (CourtLink, Lex Machina, State Net, Metabase, Content
+API/Law360/MLex, Protégé) — no source found names a get-by-citation or
+verify-by-citation endpoint among them. The deeper *technical reference* docs (schemas,
+sample code, exact auth hostnames) remain unread, gated behind free developer
+registration rather than client-side rendering. Must remain a configurable shell: the
+catalog-level evidence is now stronger than before, but the exact request/response
+shape needed to implement a real provider is still not available without registering
+and a design-partner firm's actual credentials.
 
 **The link-only / never-verifies structural boundary.** Regardless of how the auth
 shape above is eventually corrected, this session's evidence (Open Question 6) shows
@@ -299,9 +364,11 @@ comments into something the type system and a runtime guard both enforce.
 
 ## Caveats: Portal-Gated or Unobtainable
 
-Of the 16 URLs targeted across Tasks 1 and 2, the following could not be retrieved (or
-could be retrieved but not read) even after this session's available fetch tooling was
-applied:
+Of the 16 URLs targeted across Tasks 1 and 2, 14 were ultimately retrieved and read
+(12 by the sub-agent's HTTP-fetch pass, 2 more — items 6 and 11 — by the orchestrator's
+follow-up pass with WebFetch and real browser tools). The following **6** could not be
+retrieved (or could be retrieved but not read) even after both passes' available
+tooling was applied:
 
 1. **`https://developerportal.thomsonreuters.com/westlaw-us-dockets-api`** (appendix
    item 3) — redirected to `https://auth.thomsonreuters.com/u/login/identifier?state=...`
@@ -309,52 +376,62 @@ applied:
    wrong... TECHNICAL DETAILS: invalid_request. You may have pressed the back button,
    refreshed during login, opened too many login dialogs, or there is some issue with
    cookies, since we couldn't find your session." Requires an authenticated TR
-   developer-portal SSO session.
-2. **`https://developers.thomsonreuters.com/`** (appendix item 4a) — client-rendered
-   SPA shell. Full raw response body: `<!doctype html><script>...pendo analytics
-   loader...</script><html>...<title>Thomson Reuters Developer Portal</title><script
-   defer src="https://developers.thomsonreuters.com/main.js"></script><script defer
-   src="https://developers.thomsonreuters.com/remoteEntry.js"></script></head><body><div
-   id="app"></div></body></html>` — no server-rendered content; requires JS execution
-   this session's tooling does not support.
+   developer-portal SSO session. Not re-attempted in the follow-up pass — same
+   authenticated-session wall applies regardless of tooling, and bypassing it would
+   violate the plan's explicit auth-wall constraint.
+2. **`https://developers.thomsonreuters.com/`** (appendix item 4a) — **(follow-up pass
+   update)** the sub-agent's raw HTTP fetch got only a client-rendered SPA shell (see
+   the full response body quoted in appendix item 4a). The orchestrator's follow-up
+   pass confirmed via `WebFetch` that the same non-JS-executing shell is all a plain
+   fetch ever returns, then tried a real browser (`mcp__Claude_Browser__navigate` +
+   `get_page_text`): navigation succeeded and the tab title rendered as "Thomson Reuters
+   Developer Portal" (proof the page's JavaScript does execute in a real browser), but
+   every content-reading call was refused with the exact error text: **"This site
+   requires per-action approval; Browser read tools are not available on it."** This is
+   a per-origin approval gate inside the browser tool itself — it requires the user's
+   own action in their client to grant, which this session could not do on its own. Not
+   a TR access-control block, and no longer purely a "JS doesn't execute" tooling gap.
 3. **`https://developers.thomsonreuters.com/pages/api-catalog/4EB79538-7677-4AF8-AC32-F73B26DBD473`**
-   (appendix item 4b) — identical SPA-shell response to item 4a.
+   (appendix item 4b) — same follow-up-pass outcome as item 4a: WebFetch shell-only,
+   browser navigation succeeded, content-reading blocked by the identical per-action
+   approval error.
 4. **`https://developers.thomsonreuters.com/pages/api-catalog/5A0B2E6E-DE81-42E6-9431-D78B8B4F0D35`**
-   (appendix item 4c) — identical SPA-shell response to item 4a.
-5. **`https://dev.lexisnexis.com/gettingStarted`** (appendix item 6) — client-rendered
-   Angular SPA shell (`<html lang="en" data-critters-container>`, `<title>Developer
-   Portal</title>`, no route content in the server response). Requires JS execution
-   this session's tooling does not support.
-6. **`https://www.lexisnexis.com/webserviceskit/v2_0beta/text/WSK-Welcome.htm`**
+   (appendix item 4c) — same follow-up-pass outcome as item 4a/4b.
+5. **`https://www.lexisnexis.com/webserviceskit/v2_0beta/text/WSK-Welcome.htm`**
    (appendix item 8) — HTTP 404. Verbatim body: "page-not-found... Unfortunately we
    can't find the page you're looking for." This documentation resource has been
-   retired.
-7. **`https://www.lexisnexis.com/communities/academic/w/wiki/111.url-api-specifications.aspx`**
+   retired. (Not a tooling gap — genuinely gone; not re-attempted in the follow-up
+   pass, since a 404 does not change with better tooling.)
+6. **`https://www.lexisnexis.com/communities/academic/w/wiki/111.url-api-specifications.aspx`**
    (appendix item 9) — no error, but the URL silently redirects to an unrelated page
    (`https://www.lexisnexis.com/en-us/products/nexis-uni.page`, a Nexis Uni marketing
    page with HTTP 200). The original wiki content is gone; nothing about a URL API
-   specification was found at the redirected destination.
-8. **`https://www.ned.uscourts.gov/internetDocs/cmecf/AttorneyGuide-Hyperlinking.pdf`**
-   (appendix item 11) — this one is **not** a portal/auth block: the file was fully
-   retrieved (HTTP 200, `Content-Type: application/pdf`, 2,249,655 bytes, a complete
-   and valid PDF). It could not be **read** in this session because the local
-   PDF-rendering tool returned the exact error `pdftoppm is not installed. Install
-   poppler-utils (e.g. brew install poppler or apt-get install poppler-utils) to
-   enable PDF page rendering.`, no `python3` was available as a scripting fallback,
-   and a raw-byte scan for uncompressed readable text found no matches for `cite=`,
-   `findType`, `westlaw`, or `lexis` (consistent with compressed PDF content streams).
+   specification was found at the redirected destination. (Not a tooling gap — the
+   content is genuinely retired/redirected; not re-attempted in the follow-up pass.)
 
-**On the "Try it" console instruction:** per the tooling note at the top of this file,
-this session's environment did not include the `mcp__Claude_Browser__*` tools the
-additional retrieval instruction specified for driving interactive API consoles. None
-of the pages this session *could* read (Drupal-rendered TR documentation, static
-marketing pages, static library guides) exposed a server-rendered "Try it"/Swagger-
-style console in their static HTML. The pages that plausibly *would* host such
-consoles — the TR and Lexis API catalogs (items 2, 3, and 5 above) — are exactly the
-ones blocked by the client-side-rendering limitation, so this session could not
-determine whether a Try-it console exists on them, let alone drive one. This is
-recorded as a tooling-availability gap for a future session with working
-browser-automation tooling to close, not as a deliberate skip of the instruction.
+**Resolved in the follow-up pass (no longer caveats):**
+- **`https://dev.lexisnexis.com/gettingStarted`** (appendix item 6) — was SPA-blocked
+  for the sub-agent; a real browser rendered it fully. See appendix item 6 for the
+  complete retrieved content.
+- **`https://www.ned.uscourts.gov/internetDocs/cmecf/AttorneyGuide-Hyperlinking.pdf`**
+  (appendix item 11) — was downloaded successfully by the sub-agent (HTTP 200, valid
+  2,249,655-byte PDF) but not text-extractable there (`pdftoppm is not installed`, no
+  `python3` fallback). The follow-up pass found `pdftotext` already present on the same
+  machine (a different poppler-utils binary than the one the `Read` tool's PDF pipeline
+  requires) and fully extracted the text. See appendix item 11 for the findings.
+
+**On the "Try it" console instruction:** even with WebFetch and real browser tools
+available in the follow-up pass, this instruction still could not be executed for any
+URL — but now for a more precise reason than a blanket "tools unavailable." None of the
+14 successfully-read pages (Drupal-rendered TR documentation, the now-read LexisNexis
+getting-started catalog, static marketing pages, static library guides, the extracted
+PDF) exposed a server-rendered or client-rendered "Try it"/Swagger-style console — they
+are all prose documentation or catalog/use-case pages, not API reference pages with
+embedded consoles. The pages that would most plausibly host such a console — the TR API
+catalog detail pages (items 4a/4b/4c) — are exactly the ones blocked by the per-action
+approval gate above, so whether a Try-it console exists on them specifically remains
+genuinely unknown. This is recorded as an open item for a future session (with the
+per-origin approval granted) to close, not as a deliberate skip of the instruction.
 
 ## Appendix: Raw Source Evidence
 
@@ -432,7 +509,7 @@ verbatim excerpts.
 **Verbatim technical detail:** Same raw HTML as quoted in 4a.
 **Relevant open question(s):** Q3 (STILL UNRESOLVED, portal-gated by client-side rendering).
 
-**Task 1 note on item 4 (a/b/c):** the plan asked to "enumerate every legal/Westlaw-named API you can find in the catalog listing, by exact name" from these three pages. This could **not** be done — none of the three URLs returned any server-rendered catalog text in this session; all three are the same client-side-routed React application shell. This is recorded as STILL UNRESOLVED / portal-gated (by tooling, not by TR's own access controls) rather than guessed.
+**Task 1 note on item 4 (a/b/c):** the plan asked to "enumerate every legal/Westlaw-named API you can find in the catalog listing, by exact name" from these three pages. This could **not** be done — none of the three URLs returned readable catalog text in either the sub-agent's HTTP-fetch pass or the orchestrator's follow-up browser pass (see the tooling note at the top of this file and Caveats items 2–4: the browser did render the page's JS — the title updates correctly — but a per-origin approval gate blocked every content-reading call). This is recorded as STILL UNRESOLVED / portal-gated (by this session's tooling access, not by TR's own access controls) rather than guessed.
 
 ### 5. Legal API (Thomson Reuters marketing) — https://legal.thomsonreuters.com/en/products/legal-api
 
@@ -448,10 +525,44 @@ verbatim excerpts.
 
 ### 6. LexisNexis Developer Portal — Getting Started — https://dev.lexisnexis.com/gettingStarted
 
-**Fetch method:** HTTP fetch (WebFetch/Browser tools unavailable in this session — see tooling note at top of file).
-**Result:** Blocked — client-rendered SPA shell, no textual content in the server response.
-**Verbatim technical detail:** Raw HTML response (13,807 bytes) is an Angular application shell: `<html lang="en" data-critters-container>` with `<title>Developer Portal</title>`, inlined critical CSS (Angular CLI "critters" tooling marker), and no server-rendered route content for `/gettingStarted` — the actual getting-started text (auth model, hostnames like `auth-api.lexisnexis.com`/`services-api.lexisnexis.com`, token path, access-request process) is rendered client-side after JS executes and could not be retrieved by this session's non-JS HTTP fetch tool.
-**Relevant open question(s):** Q4 (STILL UNRESOLVED, portal-gated by client-side rendering, not by auth).
+**Fetch method:** WebFetch (returned only the Angular shell, confirming the sub-agent's
+original finding), then Browser tools (`mcp__Claude_Browser__navigate` +
+`get_page_text`) — **follow-up pass, orchestrator-level.**
+**Result:** Retrieved in full via the browser tool's real Chromium rendering. The
+original sub-agent run's "Blocked — client-rendered SPA shell" outcome is superseded
+below; this was a genuine tooling gap in the sub-agent's environment, now closed.
+**Verbatim technical detail:**
+- Intro: "The LexisNexis® Developer Portal is designed to provide easy access and
+  familiarization with our API solutions. Our APIs offer retrieval of data in bulk,
+  real-time coverage of media and social commentary, filtered search responses,
+  real-time news streams, archival search for historical content and more."
+- Named APIs, quoted verbatim: **Metabase Filters** ("Provides access to news datasets
+  via a single normalized data stream... filter and serve targeted ongoing news and
+  social media"), **Metabase Firehose** ("near real-time coverage of media and social
+  commentary"), **Metabase Search** ("archival Search API... search the last 100 days
+  of publicly available news data or 10 years of print content... Boolean Syntax"),
+  **Lex Machina API** ("access to Lex Machina's industry leading Litigation
+  Analytics... case data including resolutions, damages, remedies, and findings"),
+  **MLex API** ("★Coming Soon" — regulatory-risk news; "Access to the REST API is
+  currently administered via MLex Salesforce outside of the Developer API Portal"),
+  **Law360 API** ("★Coming Soon" — litigation/policy/deals news; "Access to this
+  content is administered via the Metabase API"), **State Net API** ("legislation,
+  regulations, agency documents, local ordinances, executive orders, and ballot
+  measures via a REST API").
+- On access/auth, quoted verbatim: "While this site provides basic information about
+  our APIs, registering for a LexisNexis® Developer Portal account gives you access to
+  **detailed information and documentation on all our APIs, data delivery options,
+  schemas, and sample code**... Registering is free... You will have speedy access to
+  trial." — i.e. this page is a catalog/use-case landing page, not the technical auth
+  reference; the exact token host/path/grant-type detail this session's plan hoped to
+  confirm sits one registration step further in, not on this page itself. No hostnames
+  matching `auth-api.lexisnexis.com` or `services-api.lexisnexis.com` appear anywhere
+  in the rendered page text.
+- No case-law-by-citation retrieval API or Shepard's API is named among the seven APIs
+  listed on this page.
+**Relevant open question(s):** Q4 (auth host/path/grant-type: now STILL UNRESOLVED for
+a different, more precise reason — registration-gated, not rendering-gated. Case-law
+API existence: REFUTED, corroborating appendix item 7's independent catalog).
 
 ### 7. Lexis APIs (marketing/catalog) — https://www.lexisnexis.com/en-us/products/lexis-api.page
 
@@ -511,10 +622,14 @@ verbatim excerpts.
 
 ### 11. CM/ECF Attorney Guide — Hyperlinking to Westlaw/Lexis Citations (D. Neb.) — https://www.ned.uscourts.gov/internetDocs/cmecf/AttorneyGuide-Hyperlinking.pdf
 
-**Fetch method:** HTTP fetch, then local file read (PDF binary saved to disk and passed to the file-reading tool).
-**Result:** Retrieved the file successfully (HTTP 200, `Content-Type: application/pdf`, 2,249,655 bytes — confirmed a real, complete PDF) but **could not extract its text in this session**. This is a distinct outcome from a portal/auth block: the URL itself is fully public and returned the complete document. The blocker is local tooling: the file-reading tool's PDF pipeline requires `pdftoppm` (from `poppler-utils`), which returned `pdftoppm is not installed`; there is no `python3` available in this environment for a script-based PDF-text fallback; and a raw-byte scan for readable ASCII runs of 15+ characters (290 runs found) contained zero matches for `cite=`, `findType`, `find/default`, `Link/Document`, `westlaw`, or `lexis` — consistent with the PDF's text living inside compressed (FlateDecode) content streams that require an actual PDF parser to decode, not a viewer/rendering limitation.
-**Verbatim technical detail:** None obtainable this session. The specific claims this source was meant to confirm or refute — verbatim URL templates such as `find/default.wl?cite=` and `Link/Document/FullText?findType=Y&cite=` used in real federal CM/ECF filings — are **neither confirmed nor refuted** by this session; they stand exactly as the prior (search-snippet-level) session left them.
-**Relevant open question(s):** Q5 (STILL UNRESOLVED — retrieved but not text-extractable in this session; this is the single source most likely to contain the definitive answer and could not be read).
+**Fetch method:** HTTP download (`curl`), then `pdftotext -layout` (from poppler, present on this machine at `/mingw64/bin/pdftotext` even though `pdftoppm` — which the `Read` tool's own PDF pipeline requires — is not installed) — **follow-up pass, orchestrator-level.**
+**Result:** Retrieved and fully text-extracted (890 lines of layout-preserved text from the same 2,249,655-byte PDF the sub-agent run downloaded). This supersedes the sub-agent run's "retrieved but not readable" outcome — same tooling class of gap (missing PDF-rendering dependency), closed by finding an already-installed alternative (`pdftotext`) rather than needing `pdftoppm` or `python3`.
+**Verbatim technical detail:**
+- Document title/date: "Attorney Guide to Hyperlinking in the Federal Courts... Revised on May 8, 2013" (D. Neb. CM/ECF attorney guide) — **13 years old relative to this research session**, older than every other source in this appendix; flagged here because its age is directly relevant to Open Question 5 (an older document is *more*, not less, likely to reflect a legacy query-string format if one ever existed).
+- Section "Manually Creating Links to Online Research Resources," quoted verbatim: "The process for manually adding links to Westlaw, Lexis, Google Scholar, or any other online research resource... is essentially the same," with the documented steps being: "Sign into the legal research website and open the cited document. Select the url address for the document. Right-click, and Copy the address," then paste that copied URL into a standard Word/WordPerfect hyperlink dialog. **No `cite=`, `findType=`, or any other composable query-string parameter appears anywhere in this workflow.**
+- Section "Access to Linking Software" documents two commercial Word-plugin tools as the *only* automated alternative to the manual copy-paste process: **Westlaw InsertLinks** ("a Westlaw computer software program which scans Microsoft Word... and inserts hyperlinks to the Westlaw internet address (url) for those citations," ~$100–500/month subscription) and **Shepard's Links 2008 / Lexis for Microsoft Office** (a discontinued 2008-era tool; the guide notes verbatim "Lexis is currently not selling a software subscription which will insert links to documents that will remain active upon conversion to PDF... Lexis is investigating the issue"). Both are described as *automating the same UI copy-paste behavior*, not as calling or documenting a composable URL formula.
+- A full scan of every `http(s)://` URL string in the extracted text found exactly three, all static tool-vendor/product pages (`legalsolutions.thomsonreuters.com/law-products/...`, `support.lexisnexis.com/lndownload/...`, `lexisnexis.com/en-us/products/lexis-for-microsoft-office.page`) — **none contains a citation-derived query parameter of any kind.**
+**Relevant open question(s):** Q5 (now **REFUTED**, not merely unresolved — the single source most likely to contain a legacy `cite=`-style template, dated 13 years before this session, documents only the same manual-copy/licensed-plugin pattern as the two 2026 sources). Q6 (further corroborates: this 13-year-old source's only two linking mechanisms both require an authenticated session or a paid, licensed plugin — no anonymous/programmatic path, consistent with every other source in this appendix).
 
 ### 12a. Westlaw — Creating Permanent Links (University at Buffalo Libraries) — https://research.lib.buffalo.edu/creating-permanent-links/westlaw
 

@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 Phase: 3
 Plan: Not started
 Status: All phases complete
-Last activity: 2026-07-15 — Phase 3 complete
+Last activity: 2026-07-21 - Completed quick task 260721-18r: Retrieve blocked vendor pages, extract Westlaw/LexisNexis case-law API technical specifics, and write updated integration research report for openclerk-core
 
 Progress: [██████████] 100%
 
@@ -109,6 +109,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260715-ki4 | Add a way to disable normalizeReporterSpacing so host integrations can opt out if a problem is found in production | 2026-07-15 | a73b37c | [260715-ki4-add-a-way-to-disable-normalizereportersp](./quick/260715-ki4-add-a-way-to-disable-normalizereportersp/) |
+| 260721-18r | Retrieve blocked vendor pages, extract Westlaw/LexisNexis case-law API technical specifics, and write updated integration research report for openclerk-core | 2026-07-21 | 8e1502a | [260721-18r-retrieve-blocked-vendor-pages-extract-we](./quick/260721-18r-retrieve-blocked-vendor-pages-extract-we/) |
 
 ## Deferred Items
 
