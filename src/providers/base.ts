@@ -72,24 +72,28 @@ export function trimTrailingSlash(value: string): string {
 }
 
 /**
- * Encodes an ASCII/UTF-8 (BMP) string to standard base64 without depending on Buffer (Node-only)
+ * Encodes a string to standard base64 (of its UTF-8 bytes) without depending on Buffer (Node-only)
  * or btoa (absent in some hosts, e.g. Google Apps Script) -- keeping this library platform-
  * agnostic. Used to build the HTTP Basic Authorization header for OAuth2 token endpoints that
  * expect the client credentials in the header rather than the request body (see
- * `credentialsIn: "basic"` below). Client credentials are ASCII in practice; the UTF-8 handling
- * is defensive.
+ * `credentialsIn: "basic"` below). Client credentials are ASCII in practice, but the full UTF-8
+ * handling (including 4-byte astral code points) keeps this correct for any input and matches
+ * Node's Buffer.from(s, "utf8").toString("base64"). Exported for property-based testing against
+ * that reference; not re-exported from the package barrel, so it is not part of the public API.
  */
-function toBase64(input: string): string {
+export function toBase64(input: string): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const bytes: number[] = [];
-  for (let i = 0; i < input.length; i++) {
-    const code = input.charCodeAt(i);
-    if (code < 0x80) {
-      bytes.push(code);
-    } else if (code < 0x800) {
-      bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+  for (const ch of input) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp < 0x80) {
+      bytes.push(cp);
+    } else if (cp < 0x800) {
+      bytes.push(0xc0 | (cp >> 6), 0x80 | (cp & 0x3f));
+    } else if (cp < 0x10000) {
+      bytes.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
     } else {
-      bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+      bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
     }
   }
   let out = "";

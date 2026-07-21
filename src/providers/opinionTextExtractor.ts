@@ -17,9 +17,10 @@ interface PageMarker {
 function findPageMarkers(text: string): PageMarker[] {
   const markers: PageMarker[] = [];
   const markerRegex = /\*\s?(\d+)\b/g;
-  let match: RegExpExecArray | null;
-  while ((match = markerRegex.exec(text)) !== null) {
+  let match = markerRegex.exec(text);
+  while (match !== null) {
     markers.push({ index: match.index, page: parseInt(match[1], 10) });
+    match = markerRegex.exec(text);
   }
   return markers;
 }

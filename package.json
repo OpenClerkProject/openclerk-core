@@ -16,10 +16,15 @@
     "build": "tsc",
     "prepare": "npm run build",
     "test": "jest",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "check": "biome check",
     "bluebook:update-data": "node scripts/generate-bluebook-data.js"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
     "@types/jest": "^30.0.0",
+    "fast-check": "^4.9.0",
     "jest": "^30.0.0",
     "ts-jest": "^29.4.0",
     "typescript": "^5.4.2"
