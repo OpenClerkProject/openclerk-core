@@ -1,0 +1,32 @@
+[
+  {
+    "citation": "444 U.S. 490",
+    "normalized_citations": ["444 U.S. 490"],
+    "start_index": 43,
+    "end_index": 55,
+    "status": 200,
+    "error_message": "",
+    "clusters": [
+      {
+        "id": 108713,
+        "resource_uri": "https://www.courtlistener.com/api/rest/v4/clusters/108713/",
+        "absolute_url": "/opinion/108713/norfolk-western-railway-co-v-liepelt/",
+        "docket": "https://www.courtlistener.com/api/rest/v4/dockets/108713/",
+        "case_name": "Norfolk & Western Railway Co. v. Liepelt",
+        "case_name_short": "Liepelt",
+        "case_name_full": "Norfolk & Western Railway Company v. Liepelt, Administratrix of the Estate of Liepelt, Deceased",
+        "date_filed": "1980-02-19",
+        "date_filed_is_approximate": false,
+        "slug": "norfolk-western-railway-co-v-liepelt",
+        "judges": "",
+        "citation_count": 388,
+        "precedential_status": "Published",
+        "date_blocked": null,
+        "blocked": false,
+        "syllabus": "",
+        "source": "U",
+        "sub_opinions": ["https://www.courtlistener.com/api/rest/v4/opinions/108713/"]
+      }
+    ]
+  }
+]

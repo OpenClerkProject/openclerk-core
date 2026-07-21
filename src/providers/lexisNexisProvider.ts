@@ -3,14 +3,18 @@ import { getHttpClient } from "../http";
 import { EnterpriseCitationProvider, fetchClientCredentialsToken, trimTrailingSlash } from "./base";
 
 /**
- * LexisNexis is a contract-gated enterprise API (e.g. Lexis+ / the Web
- * Services Kit): there is no single public endpoint or key OpenClerk can
- * ship, and the exact token/search paths are assigned per customer. This
- * provider implements the common OAuth2 client-credentials shape and a
- * configurable base URL; confirm the exact paths in your firm's LexisNexis
- * API documentation and adjust TOKEN_PATH/SEARCH_PATH below if they differ.
+ * LexisNexis is a contract-gated enterprise API (Lexis+ / the Web Services Kit): there is no single
+ * public content endpoint or key OpenClerk can ship. Its OAuth2 shape is confirmed from real
+ * integrations (see .planning/research/vendor-oauth-endpoints-code-evidence.md) and differs from
+ * Thomson Reuters': the token endpoint is a fixed auth-api host, the client credentials are sent as
+ * an HTTP Basic header (not in the body), a `scope` of http://oauth.lexisnexis.com/all is required,
+ * and there is no `audience`. This provider defaults to that token host and scope and lets a firm
+ * override both. SEARCH_PATH remains a placeholder to confirm against your firm's LexisNexis API
+ * documentation -- this provider is a configurable shell for lookups until a design partner's real
+ * content endpoint is validated.
  */
-const TOKEN_PATH = "/oauth/token";
+const DEFAULT_TOKEN_URL = "https://auth-api.lexisnexis.com/oauth/v2/token";
+const DEFAULT_SCOPE = "http://oauth.lexisnexis.com/all";
 const SEARCH_PATH = "/search/cases";
 
 export class LexisNexisProvider extends EnterpriseCitationProvider {
@@ -22,13 +26,20 @@ export class LexisNexisProvider extends EnterpriseCitationProvider {
     { key: "apiBaseUrl", label: "API base URL (from your LexisNexis contract)", type: "text", placeholder: "https://your-tenant.api.lexisnexis.com" },
     { key: "clientId", label: "Client ID", type: "text" },
     { key: "clientSecret", label: "Client secret", type: "password" },
+    // Optional: LexisNexis uses one fixed auth-api token host and a standard scope, so these default
+    // to DEFAULT_TOKEN_URL / DEFAULT_SCOPE. Override only if your contract directs otherwise.
+    { key: "tokenUrl", label: "OAuth token URL (optional)", type: "text", placeholder: DEFAULT_TOKEN_URL, required: false },
+    { key: "scope", label: "Scope (optional)", type: "text", placeholder: DEFAULT_SCOPE, required: false },
   ];
 
   private accessToken: string | null = null;
 
   protected async verifyCredentials(credentials: Record<string, string>): Promise<void> {
-    const baseUrl = trimTrailingSlash(credentials.apiBaseUrl);
-    this.accessToken = await fetchClientCredentialsToken(`${baseUrl}${TOKEN_PATH}`, credentials.clientId, credentials.clientSecret);
+    const tokenUrl = (credentials.tokenUrl || "").trim() || DEFAULT_TOKEN_URL;
+    this.accessToken = await fetchClientCredentialsToken(tokenUrl, credentials.clientId, credentials.clientSecret, {
+      credentialsIn: "basic",
+      scope: (credentials.scope || "").trim() || DEFAULT_SCOPE,
+    });
   }
 
   signOut(): void {

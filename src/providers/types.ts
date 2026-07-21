@@ -75,11 +75,28 @@ export interface CitationMatch {
   ambiguousMatch?: { candidateCount: number };
 }
 
+/** One choice in a `type: "select"` credential field. `label` is what the host UI renders. */
+export interface ProviderCredentialFieldOption {
+  value: string;
+  label: string;
+}
+
 export interface ProviderCredentialField {
   key: string;
   label: string;
-  type: "text" | "password";
+  /**
+   * "select" is for fixed-choice configuration enums -- e.g. which upstream API version a
+   * provider should speak, or which vendor dialect an enterprise deployment uses. These are
+   * config, not secrets, which is why they get a dropdown variant instead of being crammed into
+   * a free-text credential box. Reuses the same credential-field rendering path hosts already
+   * implement, so a new config knob needs zero new UI plumbing. A host that predates "select"
+   * can safely fall back to rendering it as free text: the value is still just a string handed
+   * to authenticate().
+   */
+  type: "text" | "password" | "select";
   placeholder?: string;
+  /** The fixed choices for a `type: "select"` field. Ignored for other types. */
+  options?: ProviderCredentialFieldOption[];
   /** Defaults to true. Set false for genuinely optional fields (e.g. an API token that only raises rate limits). */
   required?: boolean;
 }
