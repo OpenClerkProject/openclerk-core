@@ -1,0 +1,31 @@
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "resource_uri": "https://www.courtlistener.com/api/rest/v4/opinions/108713/",
+      "id": 108713,
+      "absolute_url": "/opinion/108713/norfolk-western-railway-co-v-liepelt/",
+      "cluster_id": 108713,
+      "cluster": "https://www.courtlistener.com/api/rest/v4/clusters/108713/",
+      "author_id": null,
+      "author_str": "",
+      "per_curiam": false,
+      "date_created": "2010-04-28T15:30:31.263011-07:00",
+      "type": "010combined",
+      "sha1": "6bcb6bcd3e2f8bfcbfb4d2a2b52b22e222f908ce",
+      "page_count": null,
+      "download_url": null,
+      "plain_text": "Mr. Justice Stevens delivered the opinion of the Court.\n\n*491 In either kind of case, the award of damages is intended to compensate.\n\n*492 It is his after-tax income, rather than his gross income before taxes, that provides the only realistic measure of his ability to support his family.\n",
+      "html": "",
+      "html_lawbox": "",
+      "html_columbia": "",
+      "html_anon_2020": "",
+      "xml_harvard": "",
+      "html_with_citations": "",
+      "extracted_by_ocr": false,
+      "opinions_cited": []
+    }
+  ]
+}
