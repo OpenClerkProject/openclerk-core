@@ -22,25 +22,58 @@ const NAME_SUFFIX = "(?:,\\s+(?:Inc|Ltd|Co|Corp|LLC|L\\.L\\.C|L\\.P|LLP)\\.?)*";
 // the regex engine into quadratic backtracking -- confirmed ~20s on a 150K-char adversarial input
 // before this bound was added.
 const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
+
+// Full case captions are not limited to adversarial "Party v. Party" names. Bankruptcy,
+// probate, administrative, and consolidated-disaster matters commonly use "In re ...".
+// Both alternatives reuse the bounded CASE_NAME component so this additional coverage does
+// not reintroduce the unbounded case-name backtracking fixed above.
+const VERSUS_CASE_NAME = `${CASE_NAME}\\s+v\\.?\\s+${CASE_NAME}`;
+const IN_RE_CASE_NAME = `In\\s+re\\s+${CASE_NAME}`;
+const FULL_CASE_NAME = `(?:${VERSUS_CASE_NAME}|${IN_RE_CASE_NAME})`;
+
 // A complete number token, e.g. the "745" in "745, 753" or the "349" in "349 F. Supp. 3d". The
 // trailing \b matters: without it, "\d+" happily matches just the "3" out of a reporter suffix like
 // "3d" (as in "F. Supp. 3d"), and since everything after the page number is optional, the regex
 // would accept that truncated parse instead of expanding the (lazy) reporter to swallow "3d" and
 // finding the real page number ("745") after it.
 const NUMBER = "\\d+\\b";
+
+// Reporter text must start with a letter and is capped at 40 characters. The cap keeps every
+// locator attempt bounded while covering real abbreviations such as "U.S.", "F. Supp. 3d",
+// "S.Ct.", and "L.Ed.2d".
+const REPORTER = "[A-Za-z][A-Za-z0-9.&' ]{0,39}?";
+
 // A footnote pincite attached to a page, e.g. the "n.1" in "567 n.1" (Bluebook Rule 3.2(c)).
 // Deliberately lowercase-only "n." -- reporter abbreviations that could otherwise collide here
 // (N.E.2d, N.Y.S.2d, ...) always start uppercase, so this can't mistake one for a footnote marker.
 const FOOTNOTE = "n\\.?\\s*\\d+\\b";
+
 // A single pincite page, e.g. "496", a range like "705-06", or either with a trailing footnote
-// pincite ("567 n.1"). Bluebook citations commonly cite several pincite pages at once (e.g. "393
-// U.S. 503, 505, 508, 513 (1969)"), so the full pincite segment is zero or more comma-separated
-// instances of this, not just one.
-const PINCITE_PAGE = `${NUMBER}(?:-\\d+\\b)?(?:\\s+${FOOTNOTE})?`;
+// pincite ("567 n.1"). Word, PDFs, and OCR frequently substitute a soft hyphen, Unicode hyphen,
+// non-breaking hyphen, figure dash, en/em dash, horizontal bar, or minus sign for ASCII "-".
+// Accept those only between digit runs.
+//
+// The final negative lookahead distinguishes a numeric pincite from the volume at the start of
+// a parallel reporter citation: "..., 88 S.Ct. 1753" is a locator, not pincite page 88. The
+// reporter portion is bounded, so this classification check remains bounded too.
+const PINCITE_RANGE_SEPARATOR = "[-\\u00AD\\u2010-\\u2015\\u2212]";
+const PINCITE_PAGE =
+  `${NUMBER}(?:${PINCITE_RANGE_SEPARATOR}\\d+\\b)?(?:\\s+${FOOTNOTE})?` +
+  `(?!\\s+${REPORTER}\\s+${NUMBER})`;
 const PINCITE_LIST = `${PINCITE_PAGE}(?:,\\s*${PINCITE_PAGE})*`;
 const PINCITE = `(?:,\\s*${PINCITE_LIST})?`;
+
+// A reporter locator is a volume, a bounded reporter abbreviation, and a first page. A case
+// may include one or more comma-separated parallel locators, each optionally followed by its
+// own pincite list. The final guard prevents the regex from accepting a valid prefix while a
+// complete parallel locator remains unconsumed.
+const LOCATOR = `${NUMBER}\\s+${REPORTER}\\s+${NUMBER}`;
+const PARALLEL_LOCATORS = `(?:,\\s*${LOCATOR}${PINCITE})*`;
+const NO_UNCONSUMED_PARALLEL_LOCATOR = `(?!,\\s*${LOCATOR})`;
+
 const CASE_CITATION_REGEX = new RegExp(
-  `${CASE_NAME}\\s+v\\.?\\s+${CASE_NAME},\\s*${NUMBER}\\s+[A-Za-z0-9.&' ]+?\\s+${NUMBER}${PINCITE}(?:\\s*\\([^)]*\\))?`,
+  `${FULL_CASE_NAME},\\s*${LOCATOR}${PINCITE}${PARALLEL_LOCATORS}` +
+    `(?:\\s*\\([^)]*\\))?${NO_UNCONSUMED_PARALLEL_LOCATOR}`,
   "g"
 );
 // A Bluebook short-form citation (Rule 10.9), e.g. "Rundo, 990 F.3d at 712" -- referring back to
@@ -52,7 +85,7 @@ const CASE_CITATION_REGEX = new RegExp(
 // already-correct ",?\s+at\s+" shape below -- so the U.S. Reports/SCOTUS-style convention that
 // puts a comma before "at" (e.g. "515 U.S., at 240") is not silently invisible to this scanner.
 const SHORT_FORM_CITATION_REGEX = new RegExp(
-  `${CASE_NAME},\\s*${NUMBER}\\s+[A-Za-z0-9.&' ]+?,?\\s+at\\s+${PINCITE_LIST}`,
+  `${CASE_NAME},\\s*${NUMBER}\\s+${REPORTER},?\\s+at\\s+${PINCITE_LIST}`,
   "g"
 );
 // An "Id." citation (Rule 10.9(b)/4.1), e.g. "Id. at 715" or "Id. at 719 n.2" -- refers back to
@@ -87,7 +120,7 @@ const LEADING_SIGNAL_REGEX =
 // exactly as-is; the reporter character class still excludes commas, so a lazy scan still stops
 // at the first comma it hits, and the new ",?" only optionally consumes that one comma.
 const SHORT_FORM_REGEX = new RegExp(
-  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+([A-Za-z0-9.&' ]{1,40}?),?\\s+at\\s+(${PINCITE_PAGE})`,
+  `(?:(${CASE_NAME}),\\s+)?(${NUMBER})\\s+(${REPORTER}),?\\s+at\\s+(${PINCITE_PAGE})`,
   "g"
 );
 // "Id." short-form citation (Rule 10.9), referring back to whichever citation immediately
@@ -430,7 +463,8 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
   // citation (see the short-form fallback below) instead of leaving it for that pattern to match.
   const match = raw.match(
     new RegExp(
-      `^(.+?),\\s*(${NUMBER})\\s+([A-Za-z0-9.&' ]+?)\\s+(?<!\\bat\\s)(${NUMBER})(?:,\\s*(${PINCITE_LIST}))?\\s*(?:\\(([^)]*)\\))?\\s*$`
+      `^(.+?),\\s*(${NUMBER})\\s+(${REPORTER})\\s+(?<!\\bat\\s)(${NUMBER})` +
+        `(?:,\\s*(${PINCITE_LIST}))?${PARALLEL_LOCATORS}\\s*(?:\\(([^)]*)\\))?\\s*$`
     )
   );
 
@@ -471,7 +505,7 @@ export function parseCaseCitation(text: string): ParsedCitation | null {
   // existing ",?\s+at\s+" shape, so a U.S. Reports/SCOTUS-style short form like "Roe, 410 U.S.,
   // at 165" parses instead of silently returning null.
   const shortMatch = raw.match(
-    new RegExp(`^(${CASE_NAME}),\\s*(${NUMBER})\\s+([A-Za-z0-9.&' ]+?),?\\s+at\\s+(${PINCITE_LIST})\\s*$`)
+    new RegExp(`^(${CASE_NAME}),\\s*(${NUMBER})\\s+(${REPORTER}),?\\s+at\\s+(${PINCITE_LIST})\\s*$`)
   );
 
   if (shortMatch) {
