@@ -143,18 +143,20 @@ describe('parseCaseCitation: Bluebook format coverage', () => {
     expect(parsed).toMatchObject({ page: '709', pincite: '719, 722 n.4', court: '9th Cir.', year: '2021' });
   });
 
-  test('known limitation: a parallel citation to a second reporter is misparsed, not rejected', () => {
-    // parseCaseCitation's caseName capture is deliberately unconstrained (it's meant to run on an
-    // already-isolated citation substring), so when given a full parallel citation directly, it
-    // backtracks past the first reporter/volume/page and treats the whole first citation as part of
-    // the case name, parsing only the second (N.Y.S.2d) reporter -- a wrong answer, not a null one.
-    // In the real pipeline this is less likely to bite: extractCaseCitations' stricter case-name
-    // token pattern stops well before "24 Misc. 2d ...", since digits aren't a valid case-name token.
+  test('a parallel citation preserves the primary locator and primary pincite', () => {
     const parsed = parseCaseCitation(
       'Brookville v. Paulgene Realty Corp., 24 Misc. 2d 790, 795-96, 200 N.Y.S.2d 126, 134 (Sup. Ct. 1960)'
     );
-    expect(parsed?.reporter).toBe('N.Y.S.2d');
-    expect(parsed?.caseName).toContain('24 Misc. 2d 790');
+    expect(parsed).toMatchObject({
+      caseName: 'Brookville v. Paulgene Realty Corp.',
+      volume: '24',
+      reporter: 'Misc. 2d',
+      reporterRaw: 'Misc. 2d',
+      page: '790',
+      pincite: '795-96',
+      court: 'Sup. Ct.',
+      year: '1960',
+    });
   });
 });
 
