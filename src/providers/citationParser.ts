@@ -1,5 +1,10 @@
-import { normalizeText, normalizeReporterSpacing } from "../utils";
+import { normalizeText, normalizeReporterSpacing, escapeRegExp } from "../utils";
 import { ParsedCitation } from "./types";
+// Data-only leaves from the vendored Bluebook tables (reporters-db). Importing them here does not
+// create a module cycle -- the generated files import nothing -- but it is the one place the
+// providers layer reaches into bluebook/, so keep it confined to these two tables.
+import { CASE_NAME_ABBREVIATIONS } from "../bluebook/generated/caseNameAbbreviations.generated";
+import { STATE_ABBREVIATIONS } from "../bluebook/generated/stateAbbreviations.generated";
 
 // A case-name "word" is either a capitalized token (Norfolk, W., Ry., Co., State, York...), the
 // literal "&", or one of a small set of lowercase connectors Bluebook case names commonly contain
@@ -29,10 +34,31 @@ const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN}){0,12}${NAME_SUF
 // therefore accepted only for abbreviation-shaped tokens. The right side and "In re" captions keep
 // the permissive pattern because source documents sometimes contain punctuation/OCR artifacts such
 // as "United Airlines. Inc." and "New Orleans. La." that still need to be extracted intact.
+//
+// The dotted-abbreviation alternation is built from the vendored Bluebook tables (case-name
+// abbreviations, Bluebook T6, plus state abbreviations, T10) rather than a hand-picked allowlist,
+// so every abbreviation those tables recognize ("Mass.", "Pharm.", "Consol.", "Okla.", ...) is a
+// valid left-party token. Only dotted forms go into the alternation: apostrophe abbreviations
+// ("Ass'n", "Dep't", "Nat'l") carry no period and are already matched by the plain capitalized
+// branch of LEFT_NAME_TOKEN. Multi-token entries ("W. Va.") are split so each dotted token
+// participates on its own. Entries are regex-escaped and sorted longest-first so a shorter
+// alternative can never shadow a longer one that shares its prefix. Reporter abbreviations are
+// deliberately excluded -- they name reporters, not parties.
+const BLUEBOOK_DOTTED_ABBREVIATIONS = Array.from(
+  new Set(
+    [...Object.values(CASE_NAME_ABBREVIATIONS), ...Object.keys(STATE_ABBREVIATIONS)]
+      .flatMap((abbreviation) => abbreviation.split(/\s+/))
+      .filter((token) => token.endsWith("."))
+  )
+).sort((a, b) => b.length - a.length);
+
+// Generic abbreviation shapes (initials like "W.S.", short tokens like "Ry.", all-caps runs like
+// "NLRB.") are kept alongside the table-derived alternation: party initials and reporter-style
+// letter runs are productive patterns no finite table enumerates.
 const NAME_ABBREVIATION_TOKEN =
   "(?:(?:[A-Z]\\.)+|[A-Z][a-z]{0,2}\\.|[A-Z]{2,4}\\.|" +
-  "(?:Corp|Comm'n|Comm'r|Dep't|Dist|Int'l|Nat'l|Univ|Assocs|Admin|Auth|Bros|" +
-  "Educ|Elec|Fed'n|Hosp|Indus|Mfg|Serv|Sys|Transp)\\.)";
+  BLUEBOOK_DOTTED_ABBREVIATIONS.map(escapeRegExp).join("|") +
+  ")";
 const LEFT_NAME_TOKEN = `(?:[A-Z][A-Za-z'&-]*|${NAME_ABBREVIATION_TOKEN})`;
 const LEFT_NAME_START_TOKEN =
   `(?!(?:Inc|Ltd|Co|Corp|LLC|LLP|L\\.L\\.C|L\\.P)\\.(?:\\s|$))${LEFT_NAME_TOKEN}`;

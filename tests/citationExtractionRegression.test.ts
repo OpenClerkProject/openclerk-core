@@ -131,6 +131,12 @@ describe('citation extraction regressions', () => {
     ],
     // Mid-name "Co." NOT immediately before "v." -- must stay outside the designator guard.
     ['Coverage disputes framed the appeal. ', 'Ins. Co. of North America v. Circle K Corp., 995 F.2d 190, 192 (9th Cir. 1993)'],
+    // Bluebook-table abbreviations too long for the generic shapes ([A-Z][a-z]{0,2}\. caps at
+    // three letters): "Mass." (T10 state), "Pharm."/"Consol." (T6 case-name words). These only
+    // match because NAME_ABBREVIATION_TOKEN is built from the vendored tables.
+    ['Rational-basis review controlled. ', 'Mass. Bd. of Retirement v. Murgia, 427 U.S. 307, 310 (1976)'],
+    ['Design-defect preemption followed. ', 'Mut. Pharm. Co. v. Bartlett, 570 U.S. 472, 476 (2013)'],
+    ['The FELA emotional-injury test was set out. ', 'Consol. Rail Corp. v. Gottshall, 512 U.S. 532, 535 (1994)'],
   ])('still extracts the citation after prose: %s%s', (prose, citation) => {
     expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
   });
@@ -182,7 +188,9 @@ describe('LEFT_CASE_NAME permanent ReDoS benchmark (adversarial input)', () => {
   test('long runs of abbreviation-shaped tokens with no citation complete fast', () => {
     // Abbreviation-shaped tokens are the ambiguous case for LEFT_NAME_TOKEN's alternation: "Ry."
     // can match as either branch, so this shape maximizes per-position alternation backtracking.
-    const text = "W.S. Ry. Co. R.R. Nat'l Corp. Dep't Educ. Mfg. Sys. ".repeat(28000); // ~1.46M chars
+    // Includes long table-derived entries (Consol., Telecomm., Mass., Pharm.) so the ~195-entry
+    // Bluebook-table alternation is exercised, not just the generic shapes.
+    const text = "W.S. Ry. Co. R.R. Nat'l Corp. Dep't Consol. Telecomm. Mass. Pharm. Educ. Mfg. Sys. ".repeat(18000); // ~1.5M chars
     const start = Date.now();
     extractCaseCitations(text);
     expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
