@@ -5,7 +5,7 @@ import {
 } from '../src/providers/citationParser';
 
 const MILLER_CITATION =
-  'Warsaw Convention. Miller v. United Airlines. Inc., 174 F.3d 366, 371-72 (2d Cir. 1999)';
+  'Miller v. United Airlines. Inc., 174 F.3d 366, 371-72 (2d Cir. 1999)';
 
 const AIR_CRASH_CITATION =
   'In re Air Crash Disaster Near New Orleans. La., 821 F.2d 1147, 1165 (5th Cir. 1987)';
@@ -30,7 +30,7 @@ const KAISER_PASSAGE =
   'after the';
 
 describe('citation extraction regressions', () => {
-  test('keeps the complete Miller pincite range and court/year parenthetical', () => {
+  test('does not include the preceding sentence in the Miller citation', () => {
     const text =
       'held that the automatic stay provision of the Bankruptcy Code may toll the statute of ' +
       'limitations under the Warsaw Convention. Miller v. United Airlines. Inc., 174 F.3d 366, ' +
