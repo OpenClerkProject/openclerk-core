@@ -36,8 +36,17 @@ const NAME_ABBREVIATION_TOKEN =
 const LEFT_NAME_TOKEN = `(?:[A-Z][A-Za-z'&-]*|${NAME_ABBREVIATION_TOKEN})`;
 const LEFT_NAME_START_TOKEN =
   `(?!(?:Inc|Ltd|Co|Corp|LLC|LLP|L\\.L\\.C|L\\.P)\\.(?:\\s|$))${LEFT_NAME_TOKEN}`;
+// Terminal corporate designators (Inc./Ltd./LLC/LLP) end a party name, so mid-name they are
+// valid only when "v." comes next ("Chevron U.S.A. Inc. v. ..."). Without this guard, a sentence
+// ending in a bare designator bridges into a following citation exactly like the sentence-period
+// bug above: "reorganized as Widget Inc. Smith v. Jones, ..." captured "Widget Inc. Smith" as the
+// left party. Co./Corp. are deliberately NOT in this guard -- unlike the terminal designators,
+// they appear mid-name in real captions ("Ins. Co. of N. Am. v. ...", "Norfolk & W. Ry. Co. v.
+// Liepelt"). The dot is required on Inc./Ltd. (their bare forms are ordinary capitalized words
+// with no sentence-boundary ambiguity), while LLC/LLP are matched with or without one.
 const LEFT_NAME_CONT_TOKEN =
-  `(?:${LEFT_NAME_TOKEN}|&|of|the|and|for|a|an|ex|rel\\.?)`;
+  `(?:(?!(?:(?:Inc|Ltd)\\.|(?:LLC|LLP)\\b\\.?)(?!\\s+v\\.?\\s))${LEFT_NAME_TOKEN}` +
+  `|&|of|the|and|for|a|an|ex|rel\\.?)`;
 const LEFT_CASE_NAME =
   `${LEFT_NAME_START_TOKEN}(?:\\s+${LEFT_NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
 
