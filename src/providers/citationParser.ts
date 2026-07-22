@@ -23,11 +23,29 @@ const NAME_SUFFIX = "(?:,\\s+(?:Inc|Ltd|Co|Corp|LLC|L\\.L\\.C|L\\.P|LLP)\\.?)*";
 // before this bound was added.
 const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
 
+// The party before "v." needs a stricter period rule than the general CASE_NAME pattern. With the
+// permissive token above, a citation after a sentence could begin at the preceding proper noun:
+// "Warsaw Convention. Miller v. ..." was captured as one case name. Periods on the left side are
+// therefore accepted only for abbreviation-shaped tokens. The right side and "In re" captions keep
+// the permissive pattern because source documents sometimes contain punctuation/OCR artifacts such
+// as "United Airlines. Inc." and "New Orleans. La." that still need to be extracted intact.
+const NAME_ABBREVIATION_TOKEN =
+  "(?:(?:[A-Z]\\.)+|[A-Z][a-z]{0,2}\\.|[A-Z]{2,4}\\.|" +
+  "(?:Corp|Comm'n|Comm'r|Dep't|Dist|Int'l|Nat'l|Univ|Assocs|Admin|Auth|Bros|" +
+  "Educ|Elec|Fed'n|Hosp|Indus|Mfg|Serv|Sys|Transp)\\.)";
+const LEFT_NAME_TOKEN = `(?:[A-Z][A-Za-z'&-]*|${NAME_ABBREVIATION_TOKEN})`;
+const LEFT_NAME_START_TOKEN =
+  `(?!(?:Inc|Ltd|Co|Corp|LLC|LLP|L\\.L\\.C|L\\.P)\\.(?:\\s|$))${LEFT_NAME_TOKEN}`;
+const LEFT_NAME_CONT_TOKEN =
+  `(?:${LEFT_NAME_TOKEN}|&|of|the|and|for|a|an|ex|rel\\.?)`;
+const LEFT_CASE_NAME =
+  `${LEFT_NAME_START_TOKEN}(?:\\s+${LEFT_NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
+
 // Full case captions are not limited to adversarial "Party v. Party" names. Bankruptcy,
 // probate, administrative, and consolidated-disaster matters commonly use "In re ...".
-// Both alternatives reuse the bounded CASE_NAME component so this additional coverage does
+// Both alternatives reuse bounded case-name components so this additional coverage does
 // not reintroduce the unbounded case-name backtracking fixed above.
-const VERSUS_CASE_NAME = `${CASE_NAME}\\s+v\\.?\\s+${CASE_NAME}`;
+const VERSUS_CASE_NAME = `${LEFT_CASE_NAME}\\s+v\\.?\\s+${CASE_NAME}`;
 const IN_RE_CASE_NAME = `In\\s+re\\s+${CASE_NAME}`;
 const FULL_CASE_NAME = `(?:${VERSUS_CASE_NAME}|${IN_RE_CASE_NAME})`;
 
