@@ -15,36 +15,31 @@ import { STATE_ABBREVIATIONS } from "../bluebook/generated/stateAbbreviations.ge
 const NAME_START_TOKEN = "[A-Z][A-Za-z.'&-]*";
 const NAME_CONT_TOKEN = "(?:[A-Z][A-Za-z.'&-]*|&|of|the|and|for|a|an|ex|rel\\.?)";
 // Corporate designators ("Inc.", "Co.", "Ltd.", ...) are needed in three places below: the
-// trailing comma-suffix a party name can carry ("Delta Airlines, Inc."), and the two
-// sentence-boundary guards on the party before "v." Rather than hand-maintaining the designator
-// strings, we derive them from the vendored Free Law Project tables so they stay in sync with
-// upstream: the only hand-authored input is a short, documented list of organizational-form
-// *words*, looked up in CASE_NAME_ABBREVIATIONS to get the authoritative abbreviation ("company"
-// -> "Co.", "incorporated" -> "Inc."). They split by linguistic behavior:
-//   - MID-NAME designators (Co., Corp.) occur *inside* real captions ("Ins. Co. of North
-//     America", "Norfolk & W. Ry. Co.") and so must not, on their own, end a left party.
-//   - TERMINAL designators (Inc., Ltd.) essentially always end the party name.
-// Entity-form initialisms (LLC, LLP, L.P., ...) are the one designator class reporters-db does
-// not carry, so they are declared here as a small grammar group -- like the lowercase connectors
-// in the token patterns -- rather than a hand-picked list of abbreviation strings.
-const MIDNAME_ORG_FORM_WORDS = ["company", "corporation"];
-const TERMINAL_ORG_FORM_WORDS = ["incorporated", "limited"];
+// trailing comma-suffix a party name can carry ("Delta Airlines, Inc."), the guard against
+// starting a left party at a bare designator, and the guard against a designator bridging a
+// sentence boundary. Rather than hand-maintaining the designator strings, we derive them from the
+// vendored Free Law Project tables so they stay in sync with upstream: the only hand-authored
+// input is a short, documented list of organizational-form *words*, looked up in
+// CASE_NAME_ABBREVIATIONS to get the authoritative abbreviation ("company" -> "Co.",
+// "incorporated" -> "Inc."). Entity-form initialisms (LLC, LLP, L.P., ...) are the one designator
+// class reporters-db does not carry, so they are declared here as a small grammar group -- like
+// the lowercase connectors in the token patterns -- rather than a hand-picked list of
+// abbreviation strings.
+const ORG_FORM_WORDS = ["company", "corporation", "incorporated", "limited"];
 const ENTITY_FORM_INITIALISMS = ["LLC", "LLP", "PLLC", "L.L.C.", "L.L.P.", "L.P."];
 
 function designatorsForWords(words: string[]): string[] {
   const table = CASE_NAME_ABBREVIATIONS as Record<string, string>;
   return words.map((word) => table[word]).filter((abbreviation): abbreviation is string => Boolean(abbreviation));
 }
-const MIDNAME_DESIGNATORS = designatorsForWords(MIDNAME_ORG_FORM_WORDS);
-const TERMINAL_DESIGNATORS = [...designatorsForWords(TERMINAL_ORG_FORM_WORDS), ...ENTITY_FORM_INITIALISMS];
-const ALL_DESIGNATORS = [...MIDNAME_DESIGNATORS, ...TERMINAL_DESIGNATORS];
+const ALL_DESIGNATORS = [...designatorsForWords(ORG_FORM_WORDS), ...ENTITY_FORM_INITIALISMS];
 
 // Builds a regex fragment matching any designator as a complete token. A dotted form ("Inc.",
 // "L.P.") requires its trailing dot: with an *optional* dot, "Inc." can also match as bare "Inc",
-// and a following "\s+v" boundary check then misfires one character early (against the ".") and
-// wrongly concludes the name continues. Bare initialisms (LLC/LLP/PLLC) take an optional dot. The
-// trailing (?![A-Za-z]) stops a designator from matching a prefix of a longer word. Sorted
-// longest-first so a shorter alternative can't shadow a longer one that shares its prefix.
+// and a following boundary check then misfires one character early (against the ".") and wrongly
+// concludes the name continues. Bare initialisms (LLC/LLP/PLLC) take an optional dot. The trailing
+// (?![A-Za-z]) stops a designator from matching a prefix of a longer word. Sorted longest-first so
+// a shorter alternative can't shadow a longer one that shares its prefix.
 function buildDesignatorToken(designators: string[]): string {
   const alternatives = designators
     .slice()
@@ -57,7 +52,6 @@ function buildDesignatorToken(designators: string[]): string {
   return `(?:${alternatives.join("|")})(?![A-Za-z])`;
 }
 const ALL_DESIGNATOR_TOKEN = buildDesignatorToken(ALL_DESIGNATORS);
-const TERMINAL_DESIGNATOR_TOKEN = buildDesignatorToken(TERMINAL_DESIGNATORS);
 
 // A party name is sometimes followed by a comma-separated corporate designator (Bluebook Rule
 // 10.2.1(f) drops most of these, but plenty of real-world citations -- including both of the
@@ -111,19 +105,27 @@ const NAME_ABBREVIATION_TOKEN =
   BLUEBOOK_DOTTED_ABBREVIATIONS.map(escapeRegExp).join("|") +
   ")";
 const LEFT_NAME_TOKEN = `(?:[A-Z][A-Za-z'&-]*|${NAME_ABBREVIATION_TOKEN})`;
-// Don't START a left party at a bare designator (full set): "...as Widget Inc. Smith v. Jones"
-// must not open a party at "Inc.".
+// Don't START a left party in the middle of a word, and don't start it at a bare designator. The
+// leading (?<![A-Za-z.]) matters when the start guard rejects a designator that begins with a
+// repeated letter or dotted initials: after refusing to open at "LLC."/"L.L.C.", the scanner would
+// otherwise retry one character in and match the fragment "LC."/"L.C." as an abbreviation-shaped
+// token ("...Holdings LLC. Miller v. Carter" -> "LC. Miller v. Carter"). Requiring a word boundary
+// before the first token keeps the party starting at a real word ("Miller").
 const LEFT_NAME_START_TOKEN =
-  `(?!${ALL_DESIGNATOR_TOKEN}(?:\\s|,|\\)|;|:|$))${LEFT_NAME_TOKEN}`;
-// Terminal corporate designators end a party name, so mid-name they are valid only when "v."
-// comes next ("Chevron U.S.A. Inc. v. ..."). Without this guard, a sentence ending in a bare
-// designator bridges into a following citation exactly like the sentence-period bug above:
-// "reorganized as Widget Inc. Smith v. Jones, ..." captured "Widget Inc. Smith" as the left
-// party. The MID-NAME designators (Co./Corp.) are deliberately excluded from this guard -- unlike
-// the terminal ones they appear mid-name in real captions ("Ins. Co. of N. Am. v. ...", "Norfolk
-// & W. Ry. Co. v. Liepelt").
+  `(?<![A-Za-z.])(?!${ALL_DESIGNATOR_TOKEN}(?:\\s|,|\\)|;|:|$))${LEFT_NAME_TOKEN}`;
+// A corporate designator ends a party name, so it may be followed only by "v.", a lowercase
+// connector, a comma-suffix, another designator, or the end of the name -- never by a fresh
+// capitalized proper noun. Enforcing that with a single rule (a designator may not be immediately
+// followed by a capitalized token that is not itself a designator) covers both failure modes:
+//   - a terminal designator bridging a sentence: "reorganized as Widget Inc. Smith v. Jones"
+//     would otherwise capture "Widget Inc. Smith";
+//   - a mid-name designator (Co./Corp.) bridging a sentence: "...owned by Bechtel Corp.
+//     Massachusetts v. EPA" would otherwise capture "Bechtel Corp. Massachusetts".
+// It leaves real captions intact because there the token after a designator is "v." ("Norfolk &
+// W. Ry. Co. v. Liepelt"), a lowercase connector ("Ins. Co. of North America"), or another
+// designator ("Time Warner Entm't Co. L.P."), none of which is a bare capitalized word.
 const LEFT_NAME_CONT_TOKEN =
-  `(?:(?!${TERMINAL_DESIGNATOR_TOKEN}(?!\\s+v\\.?\\s))${LEFT_NAME_TOKEN}` +
+  `(?:(?!${ALL_DESIGNATOR_TOKEN}\\s+(?!${ALL_DESIGNATOR_TOKEN})[A-Z])${LEFT_NAME_TOKEN}` +
   `|&|of|the|and|for|a|an|ex|rel\\.?)`;
 const LEFT_CASE_NAME =
   `${LEFT_NAME_START_TOKEN}(?:\\s+${LEFT_NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;

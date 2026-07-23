@@ -148,6 +148,51 @@ describe('citation extraction regressions', () => {
   });
 
   test.each([
+    // A sentence ending in a MID-NAME designator (Co./Corp.) must not bridge into the next
+    // citation. These designators appear inside real captions, so they are not treated as a hard
+    // terminal boundary -- but a designator may never be followed by a fresh capitalized word, so
+    // the prose sentence still ends and the citation is extracted alone.
+    [
+      'Following the acquisition, all liabilities passed to Halcyon Media Corp. ',
+      'Delgado v. Reyes, 901 N.E.2d 112 (Ill. App. Ct. 2009)',
+    ],
+    [
+      'The disputed route was flown by Pan Ocean Shipping Co. ',
+      'Adjeman v. Larue, 622 F.3d 33 (5th Cir. 2010)',
+    ],
+    [
+      'The disputed cleanup contract had been awarded to Bechtel Corp. ',
+      'Massachusetts v. EPA, 549 U.S. 497 (2007)',
+    ],
+    // A sentence ending in a bare entity initialism ("...Holdings LLC.") must not leak a
+    // double-letter fragment ("LC.") into the following party.
+    [
+      'The building is owned and managed by Zenith Holdings LLC. ',
+      'Miller v. Carter, 88 A.3d 204 (Del. 2014)',
+    ],
+    // A sentence ending in a bare dotted initialism ("...as an L.L.C.") must not leak "L.C.".
+    [
+      'The defendant reincorporated last year as an L.L.C. ',
+      'Broudo v. Dura Pharmaceuticals L.P., 544 U.S. 336 (2005)',
+    ],
+  ])('does not bridge a sentence ending in a designator: %s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test('known limitation: a sentence ending in a state/jurisdiction abbreviation bleeds into the citation', () => {
+    // "...headquartered in Boston, Mass. Goldberg v. Kelly" -- "Mass." is a valid left-party token
+    // (real captions do start with a state abbreviation, e.g. "Mass. Bd. of Retirement v. Murgia"
+    // and "Pa. Coal Co. v. Mahon"), so a purely regex-based left party cannot tell this
+    // sentence-ending "Mass." apart from a caption-leading one without real sentence segmentation.
+    // The current parser prepends the trailing abbreviation; documented here rather than left
+    // implicit. Fixing it cleanly needs backward tokenization from "v.", tracked separately.
+    const text = 'The plaintiff corporation was headquartered in Boston, Mass. Goldberg v. Kelly, 397 U.S. 254 (1970).';
+    expect(extractCaseCitations(text)).toEqual([
+      'Mass. Goldberg v. Kelly, 397 U.S. 254 (1970)',
+    ]);
+  });
+
+  test.each([
     ['soft hyphen', '\u00ad'],
     ['Unicode hyphen', '\u2010'],
     ['non-breaking hyphen', '\u2011'],
