@@ -1,6 +1,6 @@
 {
   "name": "openclerk-core",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Platform-agnostic citation parsing, Bluebook rule-checking, and citation-lookup provider logic shared across OpenClerk's Word, Google Docs, and LibreOffice integrations.",
   "license": "MIT",
   "repository": {
