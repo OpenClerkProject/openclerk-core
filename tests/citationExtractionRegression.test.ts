@@ -115,14 +115,20 @@ describe('citation extraction regressions', () => {
       'Chevron U.S.A. Inc. v. Natural Resources Defense Council, Inc., 467 U.S. 837, 842-43 (1984)',
     ],
     ['The collective-action question came first. ', 'Hoffmann-La Roche Inc. v. Sperling, 493 U.S. 165, 169 (1989)'],
+    // Terminal "Corp." before "v." (derived from FLP "corporation" -> "Corp.").
+    ['Design-defect liability was addressed. ', 'Gen. Motors Corp. v. Devex Corp., 461 U.S. 648, 651 (1983)'],
     // Comma-attached LLC before "v." (NAME_SUFFIX path, not the continuation loop).
     ['Standing to cancel a trademark narrowed. ', 'Already, LLC v. Nike, Inc., 568 U.S. 85, 90 (2013)'],
-    // Allowlisted legal abbreviation (Nat'l) starting the left party after a sentence.
+    // Space-attached L.L.P. (dotted initialism) as the left party, plus bare LLC on the right.
+    ['The bankruptcy fee dispute reached the Court. ', 'Baker Botts L.L.P. v. ASARCO LLC, 576 U.S. 121, 124 (2015)'],
+    // Space-attached L.P. terminal designator immediately before "v.".
+    ['The securities-fraud loss-causation test issued. ', 'Dura Pharmaceuticals L.P. v. Broudo, 544 U.S. 336, 340 (2005)'],
+    // Legal abbreviation (Nat'l) -- derived from the FLP table -- starting the left party.
     [
       'The union prevailed on remand. ',
       "Nat'l Labor Relations Bd. v. Jones & Laughlin Steel Corp., 301 U.S. 1, 30 (1937)",
     ],
-    // Lowercase connectors (of, the) and allowlisted Educ. inside the left party.
+    // Lowercase connectors (of, the) and table-derived Educ. inside the left party.
     ['The delegation question returned years later. ', 'Bd. of Educ. of the Village v. Grumet, 512 U.S. 687, 690 (1994)'],
     // "ex rel." connector plus "State of ..." caption opening.
     [
