@@ -1,5 +1,10 @@
-import { normalizeText, normalizeReporterSpacing } from "../utils";
+import { normalizeText, normalizeReporterSpacing, escapeRegExp } from "../utils";
 import { ParsedCitation } from "./types";
+// Data-only leaves from the vendored Bluebook tables (reporters-db). Importing them here does not
+// create a module cycle -- the generated files import nothing -- but it is the one place the
+// providers layer reaches into bluebook/, so keep it confined to these two tables.
+import { CASE_NAME_ABBREVIATIONS } from "../bluebook/generated/caseNameAbbreviations.generated";
+import { STATE_ABBREVIATIONS } from "../bluebook/generated/stateAbbreviations.generated";
 
 // A case-name "word" is either a capitalized token (Norfolk, W., Ry., Co., State, York...), the
 // literal "&", or one of a small set of lowercase connectors Bluebook case names commonly contain
@@ -7,15 +12,78 @@ import { ParsedCitation } from "./types";
 // of a proper name -- rather than matching any run of non-punctuation text -- keeps ordinary lowercase
 // prose ("the court's holding in ...") from being swallowed into the captured case name, since periods
 // alone (used heavily in reporter/party abbreviations) can't be relied on as a sentence boundary.
+// The trailing entries (de/del/van/von/...) are lowercase name particles that appear inside foreign
+// party names ("Aerovias Nacionales de Colombia", "Cruz van der Berg"); without them the party would
+// stop at the particle and the whole citation would fail to match. Longer particles precede the
+// shorter ones they contain (del before de, das/dos before da) so the alternation can't stop short.
+const NAME_CONNECTORS = "&|of|the|and|for|a|an|ex|rel\\.?|del|das|dos|van|von|der|de|da|di|du|la";
 const NAME_START_TOKEN = "[A-Z][A-Za-z.'&-]*";
-const NAME_CONT_TOKEN = "(?:[A-Z][A-Za-z.'&-]*|&|of|the|and|for|a|an|ex|rel\\.?)";
-// A party name is sometimes followed by a comma-separated corporate-suffix designator (Bluebook
-// Rule 10.2.1(f) drops most of these, but plenty of real-world citations -- including both of the
+const NAME_CONT_TOKEN = `(?:[A-Z][A-Za-z.'&-]*|${NAME_CONNECTORS})`;
+// Corporate designators ("Inc.", "Co.", "Ltd.", ...) are needed in three places below: the
+// trailing comma-suffix a party name can carry ("Delta Airlines, Inc."), the guard against
+// starting a left party at a bare designator, and the guard against a designator bridging a
+// sentence boundary. Rather than hand-maintaining the designator strings, we derive them from the
+// vendored Free Law Project tables so they stay in sync with upstream: the only hand-authored
+// input is a short, documented list of organizational-form *words*, looked up in
+// CASE_NAME_ABBREVIATIONS to get the authoritative abbreviation ("company" -> "Co.",
+// "incorporated" -> "Inc."). Entity-form initialisms (LLC, LLP, L.P., ...) are the one designator
+// class reporters-db does not carry, so they are declared here as a small grammar group -- like
+// the lowercase connectors in the token patterns -- rather than a hand-picked list of
+// abbreviation strings.
+const ORG_FORM_WORDS = ["company", "corporation", "incorporated", "limited"];
+const ENTITY_FORM_INITIALISMS = ["LLC", "LLP", "PLLC", "L.L.C.", "L.L.P.", "L.P."];
+
+function designatorsForWords(words: string[]): string[] {
+  const table = CASE_NAME_ABBREVIATIONS as Record<string, string>;
+  return words.map((word) => table[word]).filter((abbreviation): abbreviation is string => Boolean(abbreviation));
+}
+const ALL_DESIGNATORS = [...designatorsForWords(ORG_FORM_WORDS), ...ENTITY_FORM_INITIALISMS];
+
+// Builds a regex fragment matching any designator as a complete token. A dotted form ("Inc.",
+// "L.P.") requires its trailing dot: with an *optional* dot, "Inc." can also match as bare "Inc",
+// and a following boundary check then misfires one character early (against the ".") and wrongly
+// concludes the name continues. Bare initialisms (LLC/LLP/PLLC) take an optional dot. The trailing
+// (?![A-Za-z]) stops a designator from matching a prefix of a longer word. Sorted longest-first so
+// a shorter alternative can't shadow a longer one that shares its prefix.
+function buildDesignatorToken(designators: string[]): string {
+  const alternatives = designators
+    .slice()
+    .sort((a, b) => b.length - a.length)
+    .map((designator) =>
+      designator.endsWith(".")
+        ? `${escapeRegExp(designator.slice(0, -1))}\\.`
+        : `${escapeRegExp(designator)}\\.?`
+    );
+  return `(?:${alternatives.join("|")})(?![A-Za-z])`;
+}
+const ALL_DESIGNATOR_TOKEN = buildDesignatorToken(ALL_DESIGNATORS);
+
+// The dotted state abbreviations (Mass., Cal., N.Y., Pa., ..., derived from the vendored FLP state
+// table) are used only to break one specific sentence-boundary tie: a location apposition. A state
+// abbreviation immediately preceded by a capitalized place name and a comma ("Boston, Mass.",
+// "Modesto, Cal.") is a geographic location closing the previous sentence, not the start of a case
+// caption -- no real caption is "SomePlace, Mass. Party v. Party". The non-dotted state names
+// (Ohio, Iowa, ...) are excluded because they are ordinary words that legitimately appear as
+// parties ("Terry v. Ohio"); only the unambiguously-abbreviated dotted forms are trimmed.
+const DOTTED_STATE_ABBREVIATIONS = Object.keys(STATE_ABBREVIATIONS)
+  .filter((abbreviation) => abbreviation.endsWith("."))
+  .sort((a, b) => b.length - a.length)
+  .map(escapeRegExp)
+  .join("|");
+
+// A party name is sometimes followed by a comma-separated corporate designator (Bluebook Rule
+// 10.2.1(f) drops most of these, but plenty of real-world citations -- including both of the
 // ChatGPT-fabricated citations in the Mata v. Avianca filing this parser is tested against --
 // still write them out), e.g. "Delta Airlines, Inc." or "China Southern Airlines Co., Ltd." (two
-// such suffixes in a row). Without this, the bare CASE_NAME token loop above has no way to cross
-// the comma before "Inc."/"Ltd." and the whole citation fails to match at all.
-const NAME_SUFFIX = "(?:,\\s+(?:Inc|Ltd|Co|Corp|LLC|L\\.L\\.C|L\\.P|LLP)\\.?)*";
+// such suffixes in a row). Without this, the bare CASE_NAME token loop below has no way to cross
+// the comma before "Inc."/"Ltd." and the whole citation fails to match at all. The dot is optional
+// here ("Airlines, Inc" and "Airlines, Inc." both occur).
+const NAME_SUFFIX_DESIGNATOR = Array.from(
+  new Set(ALL_DESIGNATORS.map((designator) => escapeRegExp(designator.replace(/\.$/, ""))))
+)
+  .sort((a, b) => b.length - a.length)
+  .join("|");
+const NAME_SUFFIX = `(?:,\\s+(?:${NAME_SUFFIX_DESIGNATOR})\\.?)*`;
 // Bounding the continuation-token repeat (real Bluebook case names don't run past a handful of
 // words) keeps worst-case scan time roughly linear in document length. An unbounded `*` here let
 // long non-matching runs of capitalized tokens (an all-caps heading, a name-heavy appendix) drive
@@ -23,11 +91,77 @@ const NAME_SUFFIX = "(?:,\\s+(?:Inc|Ltd|Co|Corp|LLC|L\\.L\\.C|L\\.P|LLP)\\.?)*";
 // before this bound was added.
 const CASE_NAME = `${NAME_START_TOKEN}(?:\\s+${NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
 
+// The party before "v." needs a stricter period rule than the general CASE_NAME pattern. With the
+// permissive token above, a citation after a sentence could begin at the preceding proper noun:
+// "Warsaw Convention. Miller v. ..." was captured as one case name. Periods on the left side are
+// therefore accepted only for abbreviation-shaped tokens. The right side and "In re" captions keep
+// the permissive pattern because source documents sometimes contain punctuation/OCR artifacts such
+// as "United Airlines. Inc." and "New Orleans. La." that still need to be extracted intact.
+//
+// The dotted-abbreviation alternation is built from the vendored Bluebook tables (case-name
+// abbreviations, Bluebook T6, plus state abbreviations, T10), so every abbreviation those tables
+// recognize ("Mass.", "Pharm.", "Consol.", "Okla.", ...) is a valid left-party token. Only dotted
+// forms go into the alternation: apostrophe abbreviations ("Ass'n", "Dep't", "Nat'l") carry no
+// period and are already matched by the plain capitalized branch of LEFT_NAME_TOKEN. Multi-token
+// entries ("W. Va.") are split so each dotted token participates on its own. Entries are
+// regex-escaped and sorted longest-first so a shorter alternative can never shadow a longer one
+// that shares its prefix. Reporter abbreviations are deliberately excluded -- they name reporters,
+// not parties.
+const BLUEBOOK_DOTTED_ABBREVIATIONS = Array.from(
+  new Set(
+    [...Object.values(CASE_NAME_ABBREVIATIONS), ...Object.keys(STATE_ABBREVIATIONS)]
+      .flatMap((abbreviation) => abbreviation.split(/\s+/))
+      .filter((token) => token.endsWith("."))
+  )
+).sort((a, b) => b.length - a.length);
+
+// Generic abbreviation shapes (initials like "W.S.", short tokens like "Ry.", all-caps runs like
+// "NLRB.") are kept alongside the table-derived alternation: party initials and reporter-style
+// letter runs are productive patterns no finite table enumerates.
+const NAME_ABBREVIATION_TOKEN =
+  "(?:(?:[A-Z]\\.)+|[A-Z][a-z]{0,2}\\.|[A-Z]{2,4}\\.|" +
+  BLUEBOOK_DOTTED_ABBREVIATIONS.map(escapeRegExp).join("|") +
+  ")";
+const LEFT_NAME_TOKEN = `(?:[A-Z][A-Za-z'&-]*|${NAME_ABBREVIATION_TOKEN})`;
+// Don't START a left party in the middle of a word, and don't start it at a bare designator. The
+// leading (?<![A-Za-z.]) matters when the start guard rejects a designator that begins with a
+// repeated letter or dotted initials: after refusing to open at "LLC."/"L.L.C.", the scanner would
+// otherwise retry one character in and match the fragment "LC."/"L.C." as an abbreviation-shaped
+// token ("...Holdings LLC. Miller v. Carter" -> "LC. Miller v. Carter"). Requiring a word boundary
+// before the first token keeps the party starting at a real word ("Miller").
+//
+// The second lookahead trims a location apposition: a dotted state abbreviation immediately
+// preceded by a capitalized place name and a comma ("...in Boston, Mass. Goldberg v. Kelly") is
+// the previous sentence's location, not the caption's first token, so the party must not open
+// there. The bounded {0,20} lookbehind keeps this linear. This fires only on the "Place, State."
+// shape; a state abbreviation at a real caption start ("Mass. Bd. of Retirement v. Murgia",
+// "Pa. Coal Co. v. Mahon") is preceded by a sentence boundary or signal, not "Place,", so it is
+// left untouched.
+const LEFT_NAME_START_TOKEN =
+  `(?<![A-Za-z.])(?!(?<=[A-Z][A-Za-z.'-]{0,20},\\s)(?:${DOTTED_STATE_ABBREVIATIONS})(?![A-Za-z]))` +
+  `(?!${ALL_DESIGNATOR_TOKEN}(?:\\s|,|\\)|;|:|$))${LEFT_NAME_TOKEN}`;
+// A corporate designator ends a party name, so it may be followed only by "v.", a lowercase
+// connector, a comma-suffix, another designator, or the end of the name -- never by a fresh
+// capitalized proper noun. Enforcing that with a single rule (a designator may not be immediately
+// followed by a capitalized token that is not itself a designator) covers both failure modes:
+//   - a terminal designator bridging a sentence: "reorganized as Widget Inc. Smith v. Jones"
+//     would otherwise capture "Widget Inc. Smith";
+//   - a mid-name designator (Co./Corp.) bridging a sentence: "...owned by Bechtel Corp.
+//     Massachusetts v. EPA" would otherwise capture "Bechtel Corp. Massachusetts".
+// It leaves real captions intact because there the token after a designator is "v." ("Norfolk &
+// W. Ry. Co. v. Liepelt"), a lowercase connector ("Ins. Co. of North America"), or another
+// designator ("Time Warner Entm't Co. L.P."), none of which is a bare capitalized word.
+const LEFT_NAME_CONT_TOKEN =
+  `(?:(?!${ALL_DESIGNATOR_TOKEN}\\s+(?!${ALL_DESIGNATOR_TOKEN})[A-Z])${LEFT_NAME_TOKEN}` +
+  `|${NAME_CONNECTORS})`;
+const LEFT_CASE_NAME =
+  `${LEFT_NAME_START_TOKEN}(?:\\s+${LEFT_NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
+
 // Full case captions are not limited to adversarial "Party v. Party" names. Bankruptcy,
 // probate, administrative, and consolidated-disaster matters commonly use "In re ...".
-// Both alternatives reuse the bounded CASE_NAME component so this additional coverage does
+// Both alternatives reuse bounded case-name components so this additional coverage does
 // not reintroduce the unbounded case-name backtracking fixed above.
-const VERSUS_CASE_NAME = `${CASE_NAME}\\s+v\\.?\\s+${CASE_NAME}`;
+const VERSUS_CASE_NAME = `${LEFT_CASE_NAME}\\s+v\\.?\\s+${CASE_NAME}`;
 const IN_RE_CASE_NAME = `In\\s+re\\s+${CASE_NAME}`;
 const FULL_CASE_NAME = `(?:${VERSUS_CASE_NAME}|${IN_RE_CASE_NAME})`;
 

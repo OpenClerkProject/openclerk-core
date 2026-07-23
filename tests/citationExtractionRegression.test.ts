@@ -5,7 +5,7 @@ import {
 } from '../src/providers/citationParser';
 
 const MILLER_CITATION =
-  'Warsaw Convention. Miller v. United Airlines. Inc., 174 F.3d 366, 371-72 (2d Cir. 1999)';
+  'Miller v. United Airlines. Inc., 174 F.3d 366, 371-72 (2d Cir. 1999)';
 
 const AIR_CRASH_CITATION =
   'In re Air Crash Disaster Near New Orleans. La., 821 F.2d 1147, 1165 (5th Cir. 1987)';
@@ -30,7 +30,7 @@ const KAISER_PASSAGE =
   'after the';
 
 describe('citation extraction regressions', () => {
-  test('keeps the complete Miller pincite range and court/year parenthetical', () => {
+  test('does not include the preceding sentence in the Miller citation', () => {
     const text =
       'held that the automatic stay provision of the Bankruptcy Code may toll the statute of ' +
       'limitations under the Warsaw Convention. Miller v. United Airlines. Inc., 174 F.3d 366, ' +
@@ -70,6 +70,162 @@ describe('citation extraction regressions', () => {
     expect(parseCaseCitation(KAISER_CITATION)?.pincite).toBeUndefined();
   });
 
+  test('does not begin a left party at a standalone corporate-suffix token', () => {
+    // The start-token guard refuses to open a case name at a bare designator, so this
+    // (non-citation) shape yields nothing rather than "Inc. v. Jones ...".
+    const text = 'Its parent was Inc. v. Jones, 100 F.3d 200, 205 (9th Cir. 1996).';
+
+    expect(extractCaseCitations(text)).toEqual([]);
+  });
+
+  test('does not bridge a sentence ending in a bare corporate designator', () => {
+    // Same failure class as the Miller regression, but the sentence before the citation ends
+    // in "Inc." (abbreviation-shaped) instead of an ordinary proper noun.
+    const text =
+      'The debtor reorganized as Widget Inc. Smith v. Jones, 100 F.3d 200, 205 (9th Cir. 1996).';
+
+    expect(extractCaseCitations(text)).toEqual([
+      'Smith v. Jones, 100 F.3d 200, 205 (9th Cir. 1996)',
+    ]);
+  });
+
+  test('does not bridge a sentence ending in a comma-attached corporate suffix', () => {
+    const text =
+      'The complaint named Widget, Inc. Smith v. Jones, 100 F.3d 200, 205 (9th Cir. 1996).';
+
+    expect(extractCaseCitations(text)).toEqual([
+      'Smith v. Jones, 100 F.3d 200, 205 (9th Cir. 1996)',
+    ]);
+  });
+
+  test.each([
+    // Initials, short abbreviations (Ry., Co.), and "&" on the left of "v.".
+    [
+      'The railroad appealed the damages instruction. ',
+      'Norfolk & W. Ry. Co. v. Liepelt, 444 U.S. 490, 495 (1980)',
+    ],
+    // Multi-period right-hand party (R.R. Co.) with prose before the left party.
+    [
+      'The foreseeability rule traces to a railroad platform. ',
+      'Palsgraf v. Long Island R.R. Co., 248 N.Y. 339, 162 N.E. 99 (1928)',
+    ],
+    // Terminal "Inc." immediately before "v." must survive the designator guard.
+    [
+      'Agency deference took its modern form later. ',
+      'Chevron U.S.A. Inc. v. Natural Resources Defense Council, Inc., 467 U.S. 837, 842-43 (1984)',
+    ],
+    ['The collective-action question came first. ', 'Hoffmann-La Roche Inc. v. Sperling, 493 U.S. 165, 169 (1989)'],
+    // Terminal "Corp." before "v." (derived from FLP "corporation" -> "Corp.").
+    ['Design-defect liability was addressed. ', 'Gen. Motors Corp. v. Devex Corp., 461 U.S. 648, 651 (1983)'],
+    // Comma-attached LLC before "v." (NAME_SUFFIX path, not the continuation loop).
+    ['Standing to cancel a trademark narrowed. ', 'Already, LLC v. Nike, Inc., 568 U.S. 85, 90 (2013)'],
+    // Space-attached L.L.P. (dotted initialism) as the left party, plus bare LLC on the right.
+    ['The bankruptcy fee dispute reached the Court. ', 'Baker Botts L.L.P. v. ASARCO LLC, 576 U.S. 121, 124 (2015)'],
+    // Space-attached L.P. terminal designator immediately before "v.".
+    ['The securities-fraud loss-causation test issued. ', 'Dura Pharmaceuticals L.P. v. Broudo, 544 U.S. 336, 340 (2005)'],
+    // Legal abbreviation (Nat'l) -- derived from the FLP table -- starting the left party.
+    [
+      'The union prevailed on remand. ',
+      "Nat'l Labor Relations Bd. v. Jones & Laughlin Steel Corp., 301 U.S. 1, 30 (1937)",
+    ],
+    // Lowercase connectors (of, the) and table-derived Educ. inside the left party.
+    ['The delegation question returned years later. ', 'Bd. of Educ. of the Village v. Grumet, 512 U.S. 687, 690 (1994)'],
+    // "ex rel." connector plus "State of ..." caption opening.
+    [
+      'The parens patriae theory failed below. ',
+      'State of New York ex rel. Abrams v. Seneci, 817 F.2d 1015, 1017 (2d Cir. 1987)',
+    ],
+    // Mid-name "Co." NOT immediately before "v." -- must stay outside the designator guard.
+    ['Coverage disputes framed the appeal. ', 'Ins. Co. of North America v. Circle K Corp., 995 F.2d 190, 192 (9th Cir. 1993)'],
+    // Bluebook-table abbreviations too long for the generic shapes ([A-Z][a-z]{0,2}\. caps at
+    // three letters): "Mass." (T10 state), "Pharm."/"Consol." (T6 case-name words). These only
+    // match because NAME_ABBREVIATION_TOKEN is built from the vendored tables.
+    ['Rational-basis review controlled. ', 'Mass. Bd. of Retirement v. Murgia, 427 U.S. 307, 310 (1976)'],
+    ['Design-defect preemption followed. ', 'Mut. Pharm. Co. v. Bartlett, 570 U.S. 472, 476 (2013)'],
+    ['The FELA emotional-injury test was set out. ', 'Consol. Rail Corp. v. Gottshall, 512 U.S. 532, 535 (1994)'],
+  ])('still extracts the citation after prose: %s%s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test.each([
+    // A sentence ending in a MID-NAME designator (Co./Corp.) must not bridge into the next
+    // citation. These designators appear inside real captions, so they are not treated as a hard
+    // terminal boundary -- but a designator may never be followed by a fresh capitalized word, so
+    // the prose sentence still ends and the citation is extracted alone.
+    [
+      'Following the acquisition, all liabilities passed to Halcyon Media Corp. ',
+      'Delgado v. Reyes, 901 N.E.2d 112 (Ill. App. Ct. 2009)',
+    ],
+    [
+      'The disputed route was flown by Pan Ocean Shipping Co. ',
+      'Adjeman v. Larue, 622 F.3d 33 (5th Cir. 2010)',
+    ],
+    [
+      'The disputed cleanup contract had been awarded to Bechtel Corp. ',
+      'Massachusetts v. EPA, 549 U.S. 497 (2007)',
+    ],
+    // A sentence ending in a bare entity initialism ("...Holdings LLC.") must not leak a
+    // double-letter fragment ("LC.") into the following party.
+    [
+      'The building is owned and managed by Zenith Holdings LLC. ',
+      'Miller v. Carter, 88 A.3d 204 (Del. 2014)',
+    ],
+    // A sentence ending in a bare dotted initialism ("...as an L.L.C.") must not leak "L.C.".
+    [
+      'The defendant reincorporated last year as an L.L.C. ',
+      'Broudo v. Dura Pharmaceuticals L.P., 544 U.S. 336 (2005)',
+    ],
+  ])('does not bridge a sentence ending in a designator: %s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test.each([
+    // "Place, State." location apposition ending the prose must not bleed into the caption.
+    [
+      'The plaintiff corporation was headquartered in Boston, Mass. ',
+      'Goldberg v. Kelly, 397 U.S. 254 (1970)',
+    ],
+    [
+      'Both wineries grew up around Modesto, Cal. ',
+      'E. & J. Gallo Winery v. Gallo Cattle Co., 967 F.2d 1280 (9th Cir. 1992)',
+    ],
+  ])('does not bridge a "Place, State." location before the citation: %s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test.each([
+    // The "Place, State." trim must NOT touch a state abbreviation that legitimately opens a
+    // caption (preceded by a sentence boundary or signal, not "Place,").
+    ['The takings doctrine issued in ', 'Pa. Coal Co. v. Mahon, 260 U.S. 393, 415 (1922)'],
+    ['The libel standard came from ', 'N.Y. Times Co. v. Sullivan, 376 U.S. 254, 279 (1964)'],
+    ['Preemption of state parental-leave law was addressed in ', "Cal. Fed. Sav. & Loan Ass'n v. Guerra, 479 U.S. 272, 280 (1987)"],
+  ])('still extracts a caption that legitimately opens with a state abbreviation: %s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test('extracts a foreign party name joined by a lowercase particle ("de")', () => {
+    // "de"/"van"/"von"/... name particles keep the party from stopping mid-name; without them the
+    // whole citation was dropped (returned []).
+    const text =
+      'Creditors pressed their theory in Republic of Colombia v. Aerovias Nacionales de Colombia, 468 F.2d 1 (2d Cir. 1972).';
+    expect(extractCaseCitations(text)).toEqual([
+      'Republic of Colombia v. Aerovias Nacionales de Colombia, 468 F.2d 1 (2d Cir. 1972)',
+    ]);
+  });
+
+  test('known limitation: a jurisdiction abbreviation ending the prose still bleeds into the citation', () => {
+    // "...a citizen of the U.S. Ramirez v. Holder" -- unlike the "Place, State." apposition above,
+    // here the abbreviation is preceded by an ordinary preposition ("the"), the exact shape of a
+    // real caption that opens with the same token ("U.S. Steel Corp. v. ...", "N.Y. Times Co. v.
+    // ..."). The two are indistinguishable without real sentence segmentation, so this class
+    // (U.S./D.C./S.D.N.Y./court abbreviations preceded by a preposition) is left as a documented
+    // limitation rather than risk trimming a legitimate leading "U.S."/"N.Y.". Tracked separately.
+    const text = 'The petitioner had only recently naturalized as a citizen of the U.S. Ramirez v. Holder, 655 F.3d 1013 (9th Cir. 2011).';
+    expect(extractCaseCitations(text)).toEqual([
+      'U.S. Ramirez v. Holder, 655 F.3d 1013 (9th Cir. 2011)',
+    ]);
+  });
+
   test.each([
     ['soft hyphen', '\u00ad'],
     ['Unicode hyphen', '\u2010'],
@@ -93,5 +249,56 @@ describe('citation extraction regressions', () => {
       court: '2d Cir.',
       year: '1999',
     });
+  });
+});
+
+// Permanent adversarial-input benchmark for LEFT_CASE_NAME, added per CLAUDE.md's regex-safety
+// constraint: the sentence-boundary fix introduced a new left-party pattern (LEFT_NAME_TOKEN is
+// an alternation between a plain capitalized word and an abbreviation-shaped token, wrapped in
+// negative lookaheads), and any new pattern scanning full document text must be benchmarked
+// against adversarial input before merge. Mirrors the SHORT_FORM_REGEX benchmark in
+// courtListenerPorted.test.ts, including its rationale for the generous wall-clock ceiling
+// (CI jitter tolerance; a real quadratic regression at these input sizes would blow far past it).
+describe('LEFT_CASE_NAME permanent ReDoS benchmark (adversarial input)', () => {
+  const WALL_CLOCK_CEILING_MS = 20000;
+
+  test('long runs of capitalized tokens with no citation complete fast', () => {
+    // Every token can open a LEFT_CASE_NAME attempt; none ever reaches a " v. ".
+    const text = 'Warsaw Convention Treaty Article Provision Council Committee Session '.repeat(21000); // ~1.4M chars
+    const start = Date.now();
+    extractCaseCitations(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+  });
+
+  test('long runs of abbreviation-shaped tokens with no citation complete fast', () => {
+    // Abbreviation-shaped tokens are the ambiguous case for LEFT_NAME_TOKEN's alternation: "Ry."
+    // can match as either branch, so this shape maximizes per-position alternation backtracking.
+    // Includes long table-derived entries (Consol., Telecomm., Mass., Pharm.) so the ~195-entry
+    // Bluebook-table alternation is exercised, not just the generic shapes.
+    const text = "W.S. Ry. Co. R.R. Nat'l Corp. Dep't Consol. Telecomm. Mass. Pharm. Educ. Mfg. Sys. ".repeat(18000); // ~1.5M chars
+    const start = Date.now();
+    extractCaseCitations(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+  });
+
+  test('repeated dangling "v." sequences with no locator complete fast', () => {
+    // Each "v." forces the full left/right case-name machinery to run, then the required
+    // ",\s*<locator>" tail fails and the engine must abandon the attempt.
+    const text = 'Smith v. Jones and Miller v. Brooks but Davis v. Green then '.repeat(24000); // ~1.44M chars
+    const start = Date.now();
+    extractCaseCitations(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+  });
+
+  test('long capitalized prose ending in a sentence period before a valid citation stays correct and fast', () => {
+    // The original bug shape at document scale: heavy capitalized prose, a sentence-ending
+    // period, then one real citation. Verifies both the bound and that the extraction still
+    // starts at the case name rather than the preceding prose.
+    const prose = 'The Warsaw Convention Montreal Protocol Hague Amendment Guatemala Text '.repeat(20000); // ~1.42M chars
+    const text = `${prose}under the Warsaw Convention. ${MILLER_CITATION};`;
+    const start = Date.now();
+    const citations = extractCaseCitations(text);
+    expect(Date.now() - start).toBeLessThan(WALL_CLOCK_CEILING_MS);
+    expect(citations).toEqual([MILLER_CITATION]);
   });
 });
