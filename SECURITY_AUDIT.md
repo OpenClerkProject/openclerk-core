@@ -1,3 +1,18 @@
+<!--
+audit-metadata:
+  reviewed_commit: bb57315ed08c1453feb4ab4f7311224c9e2d5ad1
+  reviewed_date: 2026-07-22
+  architecture_assumptions:
+    - openclerk-core is a zero-dependency, platform-agnostic TypeScript library
+      published to npm.
+    - All three host add-ins -- openclerk-word (Word), openclerk-web (Google
+      Docs), and openclerk-gdocs (Google Docs) -- consume openclerk-core as an
+      npm dependency rather than maintaining their own copies of the logic.
+    - A fix landed here reaches a given consumer only once that consumer
+      advances its openclerk-core version pin and re-releases; consumers can lag
+      core (see finding A below on version-pin drift).
+-->
+
 # Security audit — openclerk-core
 
 Date: 2026-07-09 (updated 2026-07-10 — see finding 4, found while rebasing
@@ -132,22 +147,31 @@ suite (130 tests, including the new `citationClustering.test.ts` and
 
 ## Findings documented only (no code change)
 
-### A. `openclerk-word` does not consume this package
-`openclerk-core`'s README states it was "extracted from `openclerk-word` so
-logic doesn't have to be duplicated (or drift out of sync)." Verified this
-is not yet true in practice: `openclerk-word/package.json` has no
-dependency on `openclerk-core`, nothing is installed under
-`openclerk-word/node_modules`, and `openclerk-word` maintains its own
-separate copies of provider logic, Bluebook logic, and the
-`escapeHtml`/`isSafeHyperlinkUrl` helpers (e.g.
-`openclerk-word/src/taskpane/bluebook/manualCorrections.ts` is a distinct
-file from this repo's `src/bluebook/manualCorrections.ts`). Practical
-consequence: the fixes in this audit (items 1-3 above) do **not**
-automatically reach the shipped Word add-in — they'd need to be
-independently ported, or `openclerk-word` would need to be migrated to
-depend on this package as originally intended. Recommend the maintainers
-either wire `openclerk-word` up to consume `openclerk-core`, or explicitly
-retire one of the two copies to stop them drifting further apart.
+### A. Consumers depend on this package; the live concern is version-pin drift
+This finding has flipped since it was first written. `openclerk-word` **now
+consumes `openclerk-core` as an npm dependency**:
+`openclerk-word/package.json` declares `"openclerk-core": "^0.3.0"`, so the
+extraction described in this repo's README ("so logic doesn't have to be
+duplicated (or drift out of sync)") is real in practice — the Word add-in
+builds against the published package rather than maintaining its own private
+copy of the provider / Bluebook / hyperlink logic. The same holds for the
+other host add-ins (`openclerk-web` and `openclerk-gdocs`), which consume this
+package the same way.
+
+Practical consequence: security fixes landed **here do reach the shipped host
+add-ins** — but only once each consumer advances its `openclerk-core` version
+pin and re-releases. That is now the live risk rather than duplicated code:
+**version-pin drift**. This package is at `0.4.1`, while `openclerk-word`
+still pins `^0.3.0` (a caret range that resolves to the latest `0.3.x` and
+will **not** pick up `0.4.x`). So a fix published here in a `0.4.x` release
+does not automatically flow to Word until Word bumps its dependency to
+`^0.4.0` (or wider) and ships. Consumers can lag core by one or more
+minor versions, and different consumers can lag by different amounts.
+
+Recommendation: when a security-relevant fix ships in this package, track it
+across every consumer's pin (`openclerk-word`, `openclerk-web`, `openclerk-gdocs`)
+and bump each so the fix actually reaches end users; treat a stale pin on a
+consumer as an open security item, not a cosmetic one.
 
 ### B. Enterprise provider `apiBaseUrl` is user-supplied, scheme-checked only
 `src/providers/base.ts:34-37` (and each enterprise provider, e.g.
