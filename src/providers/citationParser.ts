@@ -12,8 +12,13 @@ import { STATE_ABBREVIATIONS } from "../bluebook/generated/stateAbbreviations.ge
 // of a proper name -- rather than matching any run of non-punctuation text -- keeps ordinary lowercase
 // prose ("the court's holding in ...") from being swallowed into the captured case name, since periods
 // alone (used heavily in reporter/party abbreviations) can't be relied on as a sentence boundary.
+// The trailing entries (de/del/van/von/...) are lowercase name particles that appear inside foreign
+// party names ("Aerovias Nacionales de Colombia", "Cruz van der Berg"); without them the party would
+// stop at the particle and the whole citation would fail to match. Longer particles precede the
+// shorter ones they contain (del before de, das/dos before da) so the alternation can't stop short.
+const NAME_CONNECTORS = "&|of|the|and|for|a|an|ex|rel\\.?|del|das|dos|van|von|der|de|da|di|du|la";
 const NAME_START_TOKEN = "[A-Z][A-Za-z.'&-]*";
-const NAME_CONT_TOKEN = "(?:[A-Z][A-Za-z.'&-]*|&|of|the|and|for|a|an|ex|rel\\.?)";
+const NAME_CONT_TOKEN = `(?:[A-Z][A-Za-z.'&-]*|${NAME_CONNECTORS})`;
 // Corporate designators ("Inc.", "Co.", "Ltd.", ...) are needed in three places below: the
 // trailing comma-suffix a party name can carry ("Delta Airlines, Inc."), the guard against
 // starting a left party at a bare designator, and the guard against a designator bridging a
@@ -52,6 +57,19 @@ function buildDesignatorToken(designators: string[]): string {
   return `(?:${alternatives.join("|")})(?![A-Za-z])`;
 }
 const ALL_DESIGNATOR_TOKEN = buildDesignatorToken(ALL_DESIGNATORS);
+
+// The dotted state abbreviations (Mass., Cal., N.Y., Pa., ..., derived from the vendored FLP state
+// table) are used only to break one specific sentence-boundary tie: a location apposition. A state
+// abbreviation immediately preceded by a capitalized place name and a comma ("Boston, Mass.",
+// "Modesto, Cal.") is a geographic location closing the previous sentence, not the start of a case
+// caption -- no real caption is "SomePlace, Mass. Party v. Party". The non-dotted state names
+// (Ohio, Iowa, ...) are excluded because they are ordinary words that legitimately appear as
+// parties ("Terry v. Ohio"); only the unambiguously-abbreviated dotted forms are trimmed.
+const DOTTED_STATE_ABBREVIATIONS = Object.keys(STATE_ABBREVIATIONS)
+  .filter((abbreviation) => abbreviation.endsWith("."))
+  .sort((a, b) => b.length - a.length)
+  .map(escapeRegExp)
+  .join("|");
 
 // A party name is sometimes followed by a comma-separated corporate designator (Bluebook Rule
 // 10.2.1(f) drops most of these, but plenty of real-world citations -- including both of the
@@ -111,8 +129,17 @@ const LEFT_NAME_TOKEN = `(?:[A-Z][A-Za-z'&-]*|${NAME_ABBREVIATION_TOKEN})`;
 // otherwise retry one character in and match the fragment "LC."/"L.C." as an abbreviation-shaped
 // token ("...Holdings LLC. Miller v. Carter" -> "LC. Miller v. Carter"). Requiring a word boundary
 // before the first token keeps the party starting at a real word ("Miller").
+//
+// The second lookahead trims a location apposition: a dotted state abbreviation immediately
+// preceded by a capitalized place name and a comma ("...in Boston, Mass. Goldberg v. Kelly") is
+// the previous sentence's location, not the caption's first token, so the party must not open
+// there. The bounded {0,20} lookbehind keeps this linear. This fires only on the "Place, State."
+// shape; a state abbreviation at a real caption start ("Mass. Bd. of Retirement v. Murgia",
+// "Pa. Coal Co. v. Mahon") is preceded by a sentence boundary or signal, not "Place,", so it is
+// left untouched.
 const LEFT_NAME_START_TOKEN =
-  `(?<![A-Za-z.])(?!${ALL_DESIGNATOR_TOKEN}(?:\\s|,|\\)|;|:|$))${LEFT_NAME_TOKEN}`;
+  `(?<![A-Za-z.])(?!(?<=[A-Z][A-Za-z.'-]{0,20},\\s)(?:${DOTTED_STATE_ABBREVIATIONS})(?![A-Za-z]))` +
+  `(?!${ALL_DESIGNATOR_TOKEN}(?:\\s|,|\\)|;|:|$))${LEFT_NAME_TOKEN}`;
 // A corporate designator ends a party name, so it may be followed only by "v.", a lowercase
 // connector, a comma-suffix, another designator, or the end of the name -- never by a fresh
 // capitalized proper noun. Enforcing that with a single rule (a designator may not be immediately
@@ -126,7 +153,7 @@ const LEFT_NAME_START_TOKEN =
 // designator ("Time Warner Entm't Co. L.P."), none of which is a bare capitalized word.
 const LEFT_NAME_CONT_TOKEN =
   `(?:(?!${ALL_DESIGNATOR_TOKEN}\\s+(?!${ALL_DESIGNATOR_TOKEN})[A-Z])${LEFT_NAME_TOKEN}` +
-  `|&|of|the|and|for|a|an|ex|rel\\.?)`;
+  `|${NAME_CONNECTORS})`;
 const LEFT_CASE_NAME =
   `${LEFT_NAME_START_TOKEN}(?:\\s+${LEFT_NAME_CONT_TOKEN}){0,12}${NAME_SUFFIX}`;
 

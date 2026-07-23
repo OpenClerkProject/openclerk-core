@@ -179,16 +179,50 @@ describe('citation extraction regressions', () => {
     expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
   });
 
-  test('known limitation: a sentence ending in a state/jurisdiction abbreviation bleeds into the citation', () => {
-    // "...headquartered in Boston, Mass. Goldberg v. Kelly" -- "Mass." is a valid left-party token
-    // (real captions do start with a state abbreviation, e.g. "Mass. Bd. of Retirement v. Murgia"
-    // and "Pa. Coal Co. v. Mahon"), so a purely regex-based left party cannot tell this
-    // sentence-ending "Mass." apart from a caption-leading one without real sentence segmentation.
-    // The current parser prepends the trailing abbreviation; documented here rather than left
-    // implicit. Fixing it cleanly needs backward tokenization from "v.", tracked separately.
-    const text = 'The plaintiff corporation was headquartered in Boston, Mass. Goldberg v. Kelly, 397 U.S. 254 (1970).';
+  test.each([
+    // "Place, State." location apposition ending the prose must not bleed into the caption.
+    [
+      'The plaintiff corporation was headquartered in Boston, Mass. ',
+      'Goldberg v. Kelly, 397 U.S. 254 (1970)',
+    ],
+    [
+      'Both wineries grew up around Modesto, Cal. ',
+      'E. & J. Gallo Winery v. Gallo Cattle Co., 967 F.2d 1280 (9th Cir. 1992)',
+    ],
+  ])('does not bridge a "Place, State." location before the citation: %s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test.each([
+    // The "Place, State." trim must NOT touch a state abbreviation that legitimately opens a
+    // caption (preceded by a sentence boundary or signal, not "Place,").
+    ['The takings doctrine issued in ', 'Pa. Coal Co. v. Mahon, 260 U.S. 393, 415 (1922)'],
+    ['The libel standard came from ', 'N.Y. Times Co. v. Sullivan, 376 U.S. 254, 279 (1964)'],
+    ['Preemption of state parental-leave law was addressed in ', "Cal. Fed. Sav. & Loan Ass'n v. Guerra, 479 U.S. 272, 280 (1987)"],
+  ])('still extracts a caption that legitimately opens with a state abbreviation: %s', (prose, citation) => {
+    expect(extractCaseCitations(`${prose}${citation}.`)).toEqual([citation]);
+  });
+
+  test('extracts a foreign party name joined by a lowercase particle ("de")', () => {
+    // "de"/"van"/"von"/... name particles keep the party from stopping mid-name; without them the
+    // whole citation was dropped (returned []).
+    const text =
+      'Creditors pressed their theory in Republic of Colombia v. Aerovias Nacionales de Colombia, 468 F.2d 1 (2d Cir. 1972).';
     expect(extractCaseCitations(text)).toEqual([
-      'Mass. Goldberg v. Kelly, 397 U.S. 254 (1970)',
+      'Republic of Colombia v. Aerovias Nacionales de Colombia, 468 F.2d 1 (2d Cir. 1972)',
+    ]);
+  });
+
+  test('known limitation: a jurisdiction abbreviation ending the prose still bleeds into the citation', () => {
+    // "...a citizen of the U.S. Ramirez v. Holder" -- unlike the "Place, State." apposition above,
+    // here the abbreviation is preceded by an ordinary preposition ("the"), the exact shape of a
+    // real caption that opens with the same token ("U.S. Steel Corp. v. ...", "N.Y. Times Co. v.
+    // ..."). The two are indistinguishable without real sentence segmentation, so this class
+    // (U.S./D.C./S.D.N.Y./court abbreviations preceded by a preposition) is left as a documented
+    // limitation rather than risk trimming a legitimate leading "U.S."/"N.Y.". Tracked separately.
+    const text = 'The petitioner had only recently naturalized as a citizen of the U.S. Ramirez v. Holder, 655 F.3d 1013 (9th Cir. 2011).';
+    expect(extractCaseCitations(text)).toEqual([
+      'U.S. Ramirez v. Holder, 655 F.3d 1013 (9th Cir. 2011)',
     ]);
   });
 
