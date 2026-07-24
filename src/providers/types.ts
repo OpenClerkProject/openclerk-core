@@ -66,6 +66,13 @@ export interface CitationMatch {
   /** Normalized citation string returned by the provider, if any. */
   citation?: string;
   /**
+   * A non-null CitationMatch means "here is a URL for this citation", NOT "this citation is
+   * genuine". Some providers (see LinkOnlyProvider) only ever produce a *link* -- their URL
+   * resolves to *something* even for a fabricated cite -- so a match from such a provider must
+   * never be treated as verification. checkCitationsForHallucinations enforces this structurally
+   * via isLinkOnlyProvider; any other consumer that wants a "verified" signal must do the same.
+   */
+  /**
    * Set when the provider's lookup resolved this citation's locator (reporter/volume/page) to
    * more than one distinct candidate case and case-name matching could not narrow it to exactly
    * one -- e.g. CourtListener returning multiple clusters for the same reporter/volume/page.
@@ -183,4 +190,40 @@ export interface RateLimitAwareProvider extends CitationProvider {
 
 export function supportsRateLimitAwareness(provider: CitationProvider): provider is RateLimitAwareProvider {
   return typeof (provider as Partial<RateLimitAwareProvider>).wasLastRequestRateLimited === "function";
+}
+
+/**
+ * Marks a provider that can produce a *hyperlink* to a citation but can NOT confirm the citation
+ * is genuine -- so its lookup result must never be treated as verification. This is the
+ * "link, not verification" boundary made part of the type system instead of living only in a
+ * comment (per the openclerk-core Core Value: a citation must never be silently "verified" wrong).
+ *
+ * The enterprise research vendors (LexisNexis, Westlaw, Bloomberg Law) are the motivating case.
+ * Their citation "links" are opaque, UI-generated permalinks that only resolve behind a signed-in,
+ * licensed human and that resolve to *something* even for a fabricated citation -- and neither
+ * vendor exposes any anonymous, programmatic way to confirm a citation exists (see
+ * .planning/research/westlaw-lexisnexis-integration.md, Open Questions 5 & 6, which refute every
+ * "get-by-citation" and composable deep-link claim across 13 years of sources). Wiring such a link
+ * into the hallucination check would manufacture the exact false-"verified" outcome the project
+ * forbids -- the Mata v. Avianca failure mode -- so checkCitationsForHallucinations checks
+ * isLinkOnlyProvider FIRST and reports these providers under `linkOnlyProviders`, never
+ * `verifiedVia`.
+ *
+ * The default is deliberately fail-safe: every EnterpriseCitationProvider (base.ts) is link-only
+ * unless a subclass explicitly proves itself verification-capable and opts out (sets
+ * `linkOnly = false`). A contract-gated vendor is thus quarantined from verification by default,
+ * never assumed trustworthy. CourtListener, the one verification-capable provider, does not extend
+ * that base and so is not link-only.
+ */
+export interface LinkOnlyProvider extends CitationProvider {
+  readonly linkOnly: true;
+}
+
+/**
+ * Runtime guard mirroring supportsOpinionText / supportsRateLimitAwareness: true when a provider
+ * has declared itself link-only (can hyperlink, cannot verify). Callers that assign a "verified"
+ * status MUST consult this and refuse to treat a link-only provider's match as verification.
+ */
+export function isLinkOnlyProvider(provider: CitationProvider): provider is LinkOnlyProvider {
+  return (provider as Partial<LinkOnlyProvider>).linkOnly === true;
 }

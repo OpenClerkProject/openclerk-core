@@ -110,6 +110,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260715-ki4 | Add a way to disable normalizeReporterSpacing so host integrations can opt out if a problem is found in production | 2026-07-15 | a73b37c | [260715-ki4-add-a-way-to-disable-normalizereportersp](./quick/260715-ki4-add-a-way-to-disable-normalizereportersp/) |
 | 260721-18r | Retrieve blocked vendor pages, extract Westlaw/LexisNexis case-law API technical specifics, and write updated integration research report for openclerk-core | 2026-07-21 | 8e1502a | [260721-18r-retrieve-blocked-vendor-pages-extract-we](./quick/260721-18r-retrieve-blocked-vendor-pages-extract-we/) |
+| 260724-lv3 | Type-enforce the verify-vs-link boundary (LinkOnlyProvider marker + isLinkOnlyProvider guard quarantining enterprise providers from hallucination-check verification) and add the README enterprise-provider caveat | 2026-07-24 | (branch claude/new-session-e4nkov) | [260724-lv3-type-enforce-verify-vs-link-and-readme-caveat](./quick/260724-lv3-type-enforce-verify-vs-link-and-readme-caveat/) |
 
 ## Deferred Items
 

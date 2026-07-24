@@ -19,6 +19,18 @@ export abstract class EnterpriseCitationProvider implements CitationProvider {
   readonly requiresAuth = true;
 
   /**
+   * Fail-safe "link, not verification" marker (see LinkOnlyProvider / isLinkOnlyProvider in
+   * types.ts). Every contract-gated enterprise vendor is treated as link-only by DEFAULT: it may
+   * yield a hyperlink to a citation, but checkCitationsForHallucinations must never treat that as
+   * confirmation the citation is real. The research vendors (LexisNexis/Westlaw/Bloomberg Law)
+   * expose no anonymous, programmatic citation-verification path at all, and their links resolve to
+   * *something* even for a fabricated cite -- so verification is opt-OUT, not opt-in: a future
+   * subclass may set this to false only once it is genuinely proven able to verify existence by
+   * citation. Typed `boolean` (not the literal `true`) precisely so such a subclass can override it.
+   */
+  readonly linkOnly: boolean = true;
+
+  /**
    * Credential keys that carry a URL the client secret (or a citation) is sent to, and must
    * therefore be https:// so nothing is transmitted in cleartext. Enforced generically in
    * authenticate() only when the value is present (an omitted optional field is skipped).

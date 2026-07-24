@@ -1,6 +1,6 @@
 import { CitationProvider } from "./types";
 import { parseCaseCitation, caseNamesMatch } from "./citationParser";
-import { supportsRateLimitAwareness } from "./types";
+import { supportsRateLimitAwareness, isLinkOnlyProvider } from "./types";
 
 export interface HallucinationCheckResult {
   raw: string;
@@ -10,6 +10,15 @@ export interface HallucinationCheckResult {
   skippedProviders: string[];
   /** Providers that returned null specifically because of a rate limit, not a genuine miss. */
   rateLimitedProviders: string[];
+  /**
+   * Providers in the checked list that are link-only (isLinkOnlyProvider) and were therefore never
+   * consulted for verification. A link-only provider (LexisNexis/Westlaw/Bloomberg Law) can offer a
+   * hyperlink to the citation but cannot confirm it exists, so it can never set `verifiedVia` -- it
+   * is quarantined here instead. This field lets a caller still surface "you can link this out via
+   * X" without ever conflating a link with a verified match. Presence here says nothing about
+   * whether the citation is genuine; only `verifiedVia` does that.
+   */
+  linkOnlyProviders: string[];
   /**
    * Set when a provider resolved this citation's locator (reporter/volume/page) to a real case,
    * but under a materially different name than the one attached to it here. This is a stronger
@@ -46,6 +55,12 @@ export interface HallucinationCheckResult {
  * either name is unavailable to compare (parsing failed, or the provider didn't return one), the
  * match is accepted as before -- this only tightens the case where both names are known.
  *
+ * A provider that is link-only (isLinkOnlyProvider -- LexisNexis/Westlaw/Bloomberg Law) is excluded
+ * from verification entirely: it can hyperlink a citation but cannot confirm one exists, so it is
+ * never called for a match and is reported under `linkOnlyProviders` instead of ever setting
+ * `verifiedVia`. This keeps the "link, not verification" boundary in the type system rather than
+ * relying on every caller to remember it.
+ *
  * This is the pure logic behind the Word add-in's "Find Hallucinations" tab (see
  * checkForHallucinations in word.ts), pulled out so it can also be run outside a Word document --
  * e.g. against text extracted from a PDF -- without depending on Office.js.
@@ -63,8 +78,20 @@ export async function checkCitationsForHallucinations(
     let ambiguousMatch: { provider: string; candidateCount: number } | undefined;
     const skippedProviders: string[] = [];
     const rateLimitedProviders: string[] = [];
+    const linkOnlyProviders: string[] = [];
 
     for (const provider of providers) {
+      // A link-only provider (LexisNexis/Westlaw/Bloomberg Law) can produce a hyperlink but never
+      // confirms a citation exists: its lookup resolves to *something* even for a fabricated cite,
+      // and only behind a signed-in, licensed human (see LinkOnlyProvider in types.ts and the
+      // research doc it cites). Treating that as verification would manufacture the exact
+      // false-"verified" outcome the Core Value forbids. So it is NEVER a verification source --
+      // checked FIRST, before auth/lookup, and recorded as available-for-linking without ever
+      // being called for a match.
+      if (isLinkOnlyProvider(provider)) {
+        linkOnlyProviders.push(provider.name);
+        continue;
+      }
       if (provider.requiresAuth && !provider.isAuthenticated()) {
         skippedProviders.push(provider.name);
         continue;
@@ -106,6 +133,7 @@ export async function checkCitationsForHallucinations(
       verifiedVia,
       skippedProviders,
       rateLimitedProviders,
+      linkOnlyProviders,
       nameMismatch: verifiedVia ? undefined : nameMismatch,
       ambiguousMatch: verifiedVia ? undefined : ambiguousMatch,
     });

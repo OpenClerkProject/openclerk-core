@@ -43,6 +43,36 @@ to be duplicated (or drift out of sync) across each platform integration.
 - **`src/utils.ts`** — shared string/HTML helpers (text normalization, HTML escaping, hyperlink
   URL safety checks).
 
+### Enterprise providers are link-only, configurable shells
+
+Only **CourtListener** is a working, verification-capable provider. The enterprise research
+vendors — **Westlaw**, **LexisNexis**, and **Bloomberg Law** — are **configurable shells**, not
+finished integrations:
+
+- **No shipped endpoint or key.** Each vendor provisions API access per customer contract, so the
+  API base URL and credentials are always supplied by the host at runtime (held in memory only,
+  never persisted). The OAuth2 token shapes are modelled from real-world evidence
+  (`.planning/research/vendor-oauth-endpoints-code-evidence.md`), but the **content/search paths
+  are unverified placeholders** to confirm against your firm's own API documentation before
+  relying on them. Bloomberg Law's programmatic auth could not be confirmed at all and is left
+  registered-but-commented-out in `src/providers/index.ts`.
+- **Link, never verification.** Extensive research
+  (`.planning/research/westlaw-lexisnexis-integration.md`, Open Questions 5 & 6) found that neither
+  Westlaw nor LexisNexis exposes any anonymous, programmatic way to *verify a citation exists*:
+  their citation "links" are opaque, UI-generated permalinks that resolve only behind a signed-in,
+  licensed human — and resolve to *something* even for a fabricated cite. Treating such a link as
+  confirmation would manufacture the exact false-"verified" outcome this library exists to prevent
+  (the *Mata v. Avianca* failure mode). This boundary is enforced in the type system, not just by
+  convention: every `EnterpriseCitationProvider` is **link-only by default** (see
+  `LinkOnlyProvider` / `isLinkOnlyProvider` in `src/providers/types.ts`), and
+  `checkCitationsForHallucinations` quarantines any link-only provider — it is reported under the
+  result's `linkOnlyProviders` field and can **never** set `verifiedVia`. The realistic model is:
+  *verify* against CourtListener's open data, *link out* to Westlaw/Lexis.
+- **Terms are customer-specific.** Westlaw/LexisNexis/Bloomberg Law subscriber agreements
+  typically restrict automated and bulk access; whether — and how — a firm may drive these APIs is
+  governed by that firm's own contract. These providers are intended to be wired up by a
+  design-partner firm using credentials it already holds, not used speculatively.
+
 ## Usage
 
 Published to the npm registry — a CI workflow (`.github/workflows/publish.yml`) runs `npm
